@@ -1,5 +1,7 @@
 # React + Vite
 
+> See `DEPLOY.md` for project deployment instructions and AWS environment configuration.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

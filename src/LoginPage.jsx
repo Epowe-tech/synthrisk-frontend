@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { signIn, signUp, confirmSignUp, resetPassword, getCurrentUser, confirmSignIn, fetchUserAttributes } from "aws-amplify/auth";
+import { Auth } from "@aws-amplify/auth";
 
 const C = {
   bg: "#08090d", surface: "#0e1118", border: "#1c2030",
@@ -39,6 +39,13 @@ export default function LoginPage({ onLogin }) {
   const [pendingEmail, setPendingEmail] = useState("");
 
   const VALID_INVITE_CODES = ["SYNTH2026", "EPOWE001"];
+  const attrsToObject = (attrs = []) => {
+    if (!Array.isArray(attrs)) return attrs || {};
+    return attrs.reduce((acc, item) => {
+      if (item.Name && item.Value) acc[item.Name] = item.Value;
+      return acc;
+    }, {});
+  };
   const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setError(""); };
   const switchMode = (m) => { setMode(m); setError(""); setSuccess(""); };
 
@@ -47,11 +54,11 @@ export default function LoginPage({ onLogin }) {
     if (!form.email || !form.password) { setError("Please enter your email and password."); return; }
     setLoading(true);
     try {
-      const { isSignedIn, nextStep } = await signIn({ username: form.email, password: form.password });
+      const { isSignedIn, nextStep } = await Auth.signIn({ username: form.email, password: form.password });
       if (isSignedIn) {
-        const cognitoUser = await getCurrentUser();
-        const attrs = await fetchUserAttributes();
-        onLogin({ id: cognitoUser.userId, email: attrs.email || form.email, name: attrs.name || form.email.split("@")[0], role: "producer" });
+        const cognitoUser = await Auth.currentAuthenticatedUser();
+        const attrs = attrsToObject(await Auth.userAttributes(cognitoUser));
+        onLogin({ id: cognitoUser.username, email: attrs.email || form.email, name: attrs.name || form.email.split("@")[0], role: "producer" });
       } else if (nextStep?.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
         setMode("newpassword");
         setSuccess("Please set a new permanent password to continue.");
@@ -76,7 +83,7 @@ export default function LoginPage({ onLogin }) {
     if (!VALID_INVITE_CODES.includes(form.inviteCode.toUpperCase())) { setError("Invalid invite code. Contact your administrator."); return; }
     setLoading(true);
     try {
-      await signUp({ username: form.email, password: form.password, options: { userAttributes: { email: form.email, name: form.name } } });
+      await Auth.signUp({ username: form.email, password: form.password, attributes: { email: form.email, name: form.name } });
       setPendingEmail(form.email); setMode("confirm");
       setSuccess("Account created! Check your email for a 6-digit confirmation code.");
     } catch (err) {
@@ -92,7 +99,7 @@ export default function LoginPage({ onLogin }) {
     if (!form.confirmationCode) { setError("Enter the confirmation code from your email."); return; }
     setLoading(true);
     try {
-      await confirmSignUp({ username: pendingEmail || form.email, confirmationCode: form.confirmationCode });
+      await Auth.confirmSignUp(pendingEmail || form.email, form.confirmationCode);
       setSuccess("Email confirmed! You can now sign in.");
       switchMode("login");
     } catch (err) {
@@ -108,7 +115,7 @@ export default function LoginPage({ onLogin }) {
     if (!form.email) { setError("Enter your email address."); return; }
     setLoading(true);
     try {
-      await resetPassword({ username: form.email });
+      await Auth.forgotPassword(form.email);
       setSuccess(`Reset code sent to ${form.email}. Check your inbox.`);
     } catch (err) { setError(err.message || "Could not send reset email."); }
     setLoading(false);
@@ -120,19 +127,13 @@ export default function LoginPage({ onLogin }) {
     if (form.newPassword !== form.confirmPassword) { setError("Passwords don't match."); return; }
     setLoading(true);
     try {
-      const { isSignedIn } = await confirmSignIn({
-        challengeResponse: form.newPassword,
-        options: {
-          userAttributes: {
-            name: form.name || form.email.split("@")[0],
-          },
-        },
+      const user = await Auth.currentAuthenticatedUser();
+      await Auth.completeNewPassword(user, form.newPassword, {
+        name: form.name || form.email.split("@")[0],
       });
-      if (isSignedIn) {
-        const cognitoUser = await getCurrentUser();
-        const attrs = await fetchUserAttributes();
-        onLogin({ id: cognitoUser.userId, email: attrs.email || form.email, name: attrs.name || form.email.split("@")[0], role: "producer" });
-      }
+      const cognitoUser = await Auth.currentAuthenticatedUser();
+      const attrs = attrsToObject(await Auth.userAttributes(cognitoUser));
+      onLogin({ id: cognitoUser.username, email: attrs.email || form.email, name: attrs.name || form.email.split("@")[0], role: "producer" });
     } catch (err) {
       setError(err.message || "Failed to set new password.");
     }

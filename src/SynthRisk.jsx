@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Auth } from "aws-amplify";
+import LoginPage from "./LoginPage.jsx";
 
 const C = {
   bg: "#08090d",
@@ -90,6 +92,43 @@ function matchMarkets(form) {
 
 function scoreColor(s) { return s <= 3.5 ? C.green : s <= 6.5 ? C.amber : C.red; }
 function scoreBadge(s) { return s <= 3.5 ? "LOW" : s <= 6.5 ? "MOD" : "HIGH"; }
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://pk0hs5sip3.execute-api.us-east-2.amazonaws.com";
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+async function apiFetch(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: JSON_HEADERS,
+    ...options,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    throw new Error(`API request failed (${response.status}): ${errText}`);
+  }
+
+  return response.json().catch(() => ({}));
+}
+
+async function fetchDraftsApi() {
+  return apiFetch("/drafts");
+}
+
+async function saveDraftApi(draft) {
+  return apiFetch("/drafts", { method: "POST", body: JSON.stringify(draft) });
+}
+
+async function deleteDraftApi(draftId) {
+  return apiFetch(`/drafts/${encodeURIComponent(draftId)}`, { method: "DELETE" });
+}
+
+async function saveSubmissionApi(submission) {
+  return apiFetch("/submissions", { method: "POST", body: JSON.stringify(submission) });
+}
+
+async function sendMarketApi(marketName, form, score) {
+  return apiFetch("/markets/send", { method: "POST", body: JSON.stringify({ marketName, form, score }) });
+}
 
 // ── SHARED UI ─────────────────────────────────────────────────────
 const Tag = ({ children, color = C.accent }) => (
@@ -303,7 +342,7 @@ const NAV = [
   { id: "markets", icon: "◈", label: "Markets" },
 ];
 
-function Sidebar({ page, setPage, draftCount }) {
+function Sidebar({ page, setPage, draftCount, user, onLogout }) {
   return (
     <div style={{ width: 210, minHeight: "100vh", background: C.surface, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, zIndex: 100 }}>
       <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.border}` }}>
@@ -329,29 +368,31 @@ function Sidebar({ page, setPage, draftCount }) {
           );
         })}
       </nav>
-      <div style={{ padding: "12px 14px", borderTop: `1px solid ${C.border}` }}>
+      <div style={{ padding: "14px", borderTop: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <div style={{ width: 28, height: 28, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, ${C.green})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff" }}>D</div>
+          <div style={{ width: 28, height: 28, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, ${C.green})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff" }}>{(user?.name || "A").charAt(0)}</div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>Demetri</div>
-            <div style={{ fontSize: 10, color: C.textDim }}>Producer</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{user?.name || "Agent"}</div>
+            <div style={{ fontSize: 10, color: C.textDim }}>{user?.role || "Producer"}</div>
           </div>
           <div style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: "50%", background: C.green }} />
         </div>
+        <button onClick={onLogout} style={{ width: "100%", marginTop: 12, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMid, fontSize: 11, fontFamily: "inherit", cursor: "pointer" }}>Sign out</button>
       </div>
     </div>
   );
 }
 
 // ── HOME ──────────────────────────────────────────────────────────
-function HomePage({ setPage, setContext, drafts }) {
+function HomePage({ setPage, setContext, drafts, user }) {
   const opps = SEED_ACCOUNTS.filter(a => a.score > 5.5);
   const active = SEED_PIPELINE.filter(p => ["Marketing", "Quotes"].includes(p.stage));
   const renewals = SEED_ACCOUNTS.filter(a => a.renewal.includes("Oct") || a.renewal.includes("Nov"));
+  const displayName = user?.name || "Agent";
   return (
     <div>
       <div style={{ marginBottom: 22 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Good morning, Demetri 👋</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Good morning, {displayName} 👋</div>
         <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>Here's your book at a glance · {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 22 }}>
@@ -900,6 +941,8 @@ export default function App() {
   const [context, setContext] = useState({});
   const [drafts, setDrafts] = useState([]);
   const [toast, setToast] = useState(null);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const nav = p => setPage(p);
 
@@ -908,7 +951,66 @@ export default function App() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const handleSaveDraft = (draftData) => {
+  useEffect(() => {
+    async function bootstrapAuth() {
+      try {
+        const currentUser = await Auth.currentAuthenticatedUser({ bypassCache: true });
+        const attributes = currentUser.attributes || {};
+        setUser({
+          id: currentUser.username,
+          email: attributes.email || currentUser.username,
+          name: attributes.name || attributes.email?.split("@")[0] || currentUser.username,
+          role: attributes["custom:role"] || "producer",
+        });
+      } catch (err) {
+        console.warn("Auth session not found", err);
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    bootstrapAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    async function loadDrafts() {
+      try {
+        const savedDrafts = await fetchDraftsApi();
+        setDrafts(Array.isArray(savedDrafts) ? savedDrafts : []);
+      } catch (err) {
+        console.warn("Draft load failed, using local state", err);
+      }
+    }
+
+    loadDrafts();
+  }, [user]);
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+    setPage("home");
+    showToast(`Welcome back, ${userData.name || "Agent"}!`, "success");
+  };
+
+  const handleLogout = async () => {
+    try {
+      await Auth.signOut();
+    } catch (err) {
+      console.warn("Sign out failed", err);
+    }
+    setUser(null);
+    setPage("home");
+    showToast("Signed out", "success");
+  };
+
+  const handleSaveDraft = async (draftData) => {
+    try {
+      await saveDraftApi(draftData);
+    } catch (err) {
+      console.warn("Draft API save failed", err);
+    }
+
     setDrafts(prev => {
       const existing = prev.findIndex(d => d.id === draftData.id);
       if (existing >= 0) {
@@ -925,17 +1027,29 @@ export default function App() {
     setContext({ draft: draftData });
   };
 
-  const handleDeleteDraft = (draftId) => {
+  const handleDeleteDraft = async (draftId) => {
+    try {
+      await deleteDraftApi(draftId);
+    } catch (err) {
+      console.warn("Draft API delete failed", err);
+    }
+
     setDrafts(prev => prev.filter(d => d.id !== draftId));
     showToast("Draft deleted", "success");
   };
 
-  const handleRunMarkets = (marketName, form) => {
+  const handleRunMarkets = async (marketName, form) => {
+    try {
+      await sendMarketApi(marketName, form, form?.score || 0);
+    } catch (err) {
+      console.warn("Send market API failed", err);
+    }
+
     showToast(`Sent to ${marketName} ✓`, "success");
   };
 
   const pages = {
-    home: <HomePage setPage={nav} setContext={setContext} drafts={drafts} />,
+    home: <HomePage setPage={nav} setContext={setContext} drafts={drafts} user={user} />,
     "new-submission": <NewSubmissionPage context={context} onSaveDraft={handleSaveDraft} onRunMarkets={handleRunMarkets} />,
     pipeline: <PipelinePage setPage={nav} setContext={setContext} drafts={drafts} onResumeDraft={handleResumeDraft} onDeleteDraft={handleDeleteDraft} />,
     "submission-workspace": <SubmissionWorkspacePage context={context} setPage={nav} setContext={setContext} />,
@@ -943,6 +1057,21 @@ export default function App() {
     "account-workspace": <AccountWorkspacePage context={context} setPage={nav} setContext={setContext} />,
     markets: <MarketsPage />,
   };
+
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg, color: C.text, fontFamily: "'DM Sans', 'Segoe UI', sans-serif" }}>
+        <div style={{ textAlign: "center", maxWidth: 360 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>Loading session…</div>
+          <div style={{ color: C.textMid, fontSize: 13 }}>Checking for an active Cognito session before showing the app.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'DM Sans', 'Segoe UI', sans-serif", color: C.text }}>
@@ -956,7 +1085,7 @@ export default function App() {
         tr:hover td { background: rgba(61,142,248,0.03); }
         @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
-      <Sidebar page={page} setPage={nav} draftCount={drafts.length} />
+      <Sidebar page={page} setPage={nav} draftCount={drafts.length} user={user} onLogout={handleLogout} />
       <main style={{ marginLeft: 210, padding: "28px 32px", minHeight: "100vh", width: "calc(100vw - 210px)" }}>
         {pages[page] || pages["home"]}
       </main>
