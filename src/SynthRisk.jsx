@@ -58,9 +58,115 @@ const NAICS_DATA = [
   { naics: "484110", industry: "General Freight Trucking", national_trc: 4.9, national_dart: 3.2 },
   { naics: "621111", industry: "Medical Offices", national_trc: 1.2, national_dart: 0.6 },
 ];
+const INDUSTRY_QUESTIONS = {
+  0: { // Roofing Contractors
+    label: "Roofing Operations",
+    questions: [
+      { id: "steepSlope", label: "Steep slope work (>6:12 pitch)?", hint: "Significantly increases fall exposure", type: "boolean", weights: { true: 0.6, false: 0 } },
+      { id: "aboveTwoStory", label: "Work performed above 2 stories?", type: "boolean", weights: { true: 0.5, false: 0 } },
+      { id: "uninsuredSubs", label: "Uninsured subcontractors used?", hint: "Subs without coverage shift liability to your policy", type: "boolean", weights: { true: 0.9, false: 0 } },
+      { id: "commercialPct", label: "Commercial work as % of revenue", type: "select", options: ["<25%", "25–50%", "50–75%", ">75%"], weights: { "<25%": 0, "25–50%": 0.1, "50–75%": 0.2, ">75%": 0.3 } },
+    ],
+  },
+  1: { // Commercial Building Construction
+    label: "Construction Operations",
+    questions: [
+      { id: "largestProject", label: "Largest single project value", type: "select", options: ["<$500K", "$500K–$2M", "$2M–$10M", ">$10M"], weights: { "<$500K": 0, "$500K–$2M": 0.2, "$2M–$10M": 0.5, ">$10M": 0.8 } },
+      { id: "structuralSteel", label: "Structural steel erection?", type: "boolean", weights: { true: 0.4, false: 0 } },
+      { id: "uninsuredSubs", label: "Uninsured subcontractors used?", type: "boolean", weights: { true: 0.7, false: 0 } },
+      { id: "excavation", label: "Excavation or shoring work?", type: "boolean", weights: { true: 0.3, false: 0 } },
+    ],
+  },
+  2: { // Electrical Contractors
+    label: "Electrical Operations",
+    questions: [
+      { id: "highVoltage", label: "High voltage work (>600V)?", hint: "Includes substations, transmission lines, industrial switchgear", type: "boolean", weights: { true: 0.8, false: 0 } },
+      { id: "workType", label: "Primary work type", type: "select", options: ["Residential", "Light Commercial", "Heavy Commercial/Industrial"], weights: { "Residential": -0.2, "Light Commercial": 0.1, "Heavy Commercial/Industrial": 0.5 } },
+      { id: "outdoorLines", label: "Outdoor or overhead line work?", type: "boolean", weights: { true: 0.4, false: 0 } },
+      { id: "energizedWork", label: "Work in energized panels or live circuits?", type: "boolean", weights: { true: 0.4, false: 0 } },
+    ],
+  },
+  3: { // Plumbing & HVAC
+    label: "Plumbing & HVAC Operations",
+    questions: [
+      { id: "gasWork", label: "Gas line installation or repair?", type: "boolean", weights: { true: 0.4, false: 0 } },
+      { id: "boilerWork", label: "Boiler or pressure vessel work?", type: "boolean", weights: { true: 0.5, false: 0 } },
+      { id: "commercialKitchen", label: "Commercial kitchen or hood work?", type: "boolean", weights: { true: 0.2, false: 0 } },
+      { id: "workSplit", label: "Commercial work as % of revenue", type: "select", options: ["<25% (mostly residential)", "25–50%", "50–75%", ">75% (mostly commercial)"], weights: { "<25% (mostly residential)": -0.1, "25–50%": 0, "50–75%": 0.1, ">75% (mostly commercial)": 0.2 } },
+    ],
+  },
+  4: { // Site Preparation
+    label: "Site Preparation Operations",
+    questions: [
+      { id: "blasting", label: "Blasting or explosives operations?", type: "boolean", weights: { true: 1.3, false: 0 } },
+      { id: "excavationDepth", label: "Maximum excavation depth", type: "select", options: ["<5 ft", "5–10 ft", "10–20 ft", ">20 ft"], weights: { "<5 ft": 0, "5–10 ft": 0.2, "10–20 ft": 0.5, ">20 ft": 0.8 } },
+      { id: "nearUtilities", label: "Work near buried utilities?", type: "boolean", weights: { true: 0.3, false: 0 } },
+      { id: "heavyEquipment", label: "Equipment over 50 tons operated?", type: "boolean", weights: { true: 0.2, false: 0 } },
+    ],
+  },
+  5: { // Full-Service Restaurants
+    label: "Restaurant Operations",
+    questions: [
+      { id: "liquorSales", label: "Liquor sales as % of revenue", type: "select", options: ["None", "<15%", "15–30%", ">30%"], weights: { "None": -0.3, "<15%": 0, "15–30%": 0.4, ">30%": 0.8 } },
+      { id: "lateNight", label: "Hours extend past midnight?", type: "boolean", weights: { true: 0.4, false: 0 } },
+      { id: "seating", label: "Seating capacity", type: "select", options: ["<50", "50–150", "150–300", ">300"], weights: { "<50": -0.2, "50–150": 0, "150–300": 0.2, ">300": 0.4 } },
+      { id: "delivery", label: "Delivery drivers employed by restaurant?", type: "boolean", weights: { true: 0.4, false: 0 } },
+    ],
+  },
+  6: { // Fitness Centers
+    label: "Fitness Center Operations",
+    questions: [
+      { id: "pool", label: "Swimming pool or hot tub on premises?", type: "boolean", weights: { true: 0.6, false: 0 } },
+      { id: "aerialActivities", label: "High-risk activities? (climbing wall, trampoline, aerial)", type: "boolean", weights: { true: 0.7, false: 0 } },
+      { id: "unattended", label: "24-hour unstaffed member access?", type: "boolean", weights: { true: 0.4, false: 0 } },
+      { id: "personalTraining", label: "Personal training services offered?", type: "boolean", weights: { true: 0.1, false: 0 } },
+    ],
+  },
+  7: { // Warehousing & Storage
+    label: "Warehouse Operations",
+    questions: [
+      { id: "hazmat", label: "Hazardous materials stored?", type: "boolean", weights: { true: 0.9, false: 0 } },
+      { id: "rackHeight", label: "Racking height", type: "select", options: ["<10 ft", "10–20 ft", "20–40 ft", ">40 ft"], weights: { "<10 ft": 0, "10–20 ft": 0.1, "20–40 ft": 0.3, ">40 ft": 0.5 } },
+      { id: "forklifts", label: "Forklift or powered industrial truck operations?", type: "boolean", weights: { true: 0.3, false: 0 } },
+      { id: "publicAccess", label: "Public access or retail component?", type: "boolean", weights: { true: 0.2, false: 0 } },
+    ],
+  },
+  8: { // General Freight Trucking
+    label: "Trucking Operations",
+    questions: [
+      { id: "radius", label: "Operational radius", type: "select", options: ["Local (<50 mi)", "Regional (<500 mi)", "Long-haul (500+ mi)"], weights: { "Local (<50 mi)": 0, "Regional (<500 mi)": 0.2, "Long-haul (500+ mi)": 0.5 } },
+      { id: "hazmat", label: "Hazardous materials transported?", type: "boolean", weights: { true: 0.9, false: 0 } },
+      { id: "fleetSize", label: "Fleet size", type: "select", options: ["1–4 units", "5–20 units", "21–50 units", ">50 units"], weights: { "1–4 units": -0.2, "5–20 units": 0, "21–50 units": 0.2, ">50 units": 0.4 } },
+      { id: "ownerOperators", label: "Uninsured owner-operators used?", type: "boolean", weights: { true: 0.4, false: 0 } },
+    ],
+  },
+  9: { // Medical Offices
+    label: "Medical Practice Operations",
+    questions: [
+      { id: "procedures", label: "Surgical or invasive procedures performed on-site?", type: "boolean", weights: { true: 0.5, false: 0 } },
+      { id: "controlled", label: "Controlled substances dispensed (DEA registration)?", type: "boolean", weights: { true: 0.3, false: 0 } },
+      { id: "specialty", label: "Practice specialty", type: "select", options: ["General Practice / Primary Care", "Specialist (non-surgical)", "Surgical Specialist"], weights: { "General Practice / Primary Care": 0, "Specialist (non-surgical)": 0.2, "Surgical Specialist": 0.5 } },
+      { id: "afterHours", label: "After-hours or urgent care services?", type: "boolean", weights: { true: 0.2, false: 0 } },
+    ],
+  },
+};
+
+function computeIndustryModifier(naicsIdx, answers) {
+  if (naicsIdx === "" || naicsIdx === undefined) return 0;
+  const set = INDUSTRY_QUESTIONS[+naicsIdx];
+  if (!set) return 0;
+  let modifier = 0;
+  for (const q of set.questions) {
+    const answer = answers[q.id];
+    if (answer === undefined || answer === null || answer === "") continue;
+    const weight = q.weights[answer];
+    if (weight !== undefined) modifier += weight;
+  }
+  return Math.max(-2, Math.min(2, modifier));
+}
 
 // ── UTILS ─────────────────────────────────────────────────────────
-function computeScore(naicsIdx, employees, hours, rec, dart) {
+function computeScore(naicsIdx, employees, hours, rec, dart, industryAnswers = {}) {
   const d = NAICS_DATA[naicsIdx];
   if (!d) return null;
   const maxTRC = Math.max(...NAICS_DATA.map(x => x.national_trc));
@@ -73,7 +179,8 @@ function computeScore(naicsIdx, employees, hours, rec, dart) {
     const adj = Math.max(-1.5, Math.min(1.5, 0.6 * (aTRC / d.national_trc - 1) + 0.4 * (aDART / d.national_dart - 1)));
     base = Math.max(1, Math.min(9.9, base + adj));
   }
-  return base;
+  const industryMod = computeIndustryModifier(naicsIdx, industryAnswers);
+  return Math.max(1, Math.min(9.9, base + industryMod));
 }
 
 function matchMarkets(form) {
@@ -471,13 +578,127 @@ const Field = ({ label, k, ph, type = "text", value, onChange }) => (
       onFocus={e => e.target.style.borderColor = C.accent} onBlur={e => e.target.style.borderColor = C.border} />
   </div>
 );
+// ── INDUSTRY QUESTIONS PANEL ──────────────────────────────────────
+// Defined outside NewSubmissionPage to prevent remounting on each render.
+const IndustryQuestionsPanel = ({ naicsIdx, answers, onChange }) => {
+  if (naicsIdx === "" || naicsIdx === undefined) return null;
+  const set = INDUSTRY_QUESTIONS[+naicsIdx];
+  if (!set) return null;
 
+  const handleAnswer = (questionId, value) => {
+    onChange({ ...answers, [questionId]: value });
+  };
+
+  const answeredCount = Object.keys(answers).filter(k =>
+    set.questions.some(q => q.id === k)
+  ).length;
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      {/* Section header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.accent, textTransform: "uppercase" }}>
+          ◈ {set.label} — Risk Factors
+        </div>
+        <div style={{ fontSize: 10, color: C.textDim }}>
+          {answeredCount}/{set.questions.length} answered
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {set.questions.map(q => {
+          const answered = answers[q.id] !== undefined && answers[q.id] !== "";
+          return (
+            <div key={q.id} style={{ background: C.bg, border: `1px solid ${answered ? C.borderHigh : C.border}`, borderRadius: 8, padding: "12px 14px", transition: "border-color 0.2s" }}>
+              {/* Question label */}
+              <div style={{ fontSize: 13, color: C.text, fontWeight: 500, marginBottom: q.hint ? 3 : 9 }}>
+                {q.label}
+              </div>
+              {q.hint && (
+                <div style={{ fontSize: 11, color: C.textDim, marginBottom: 9 }}>{q.hint}</div>
+              )}
+
+              {/* Boolean — Yes / No toggles */}
+              {q.type === "boolean" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {["Yes", "No"].map(opt => {
+                    const val = opt === "Yes" ? "true" : "false";
+                    const selected = answers[q.id] === val;
+                    const isYes = opt === "Yes";
+                    const yesWeight = q.weights["true"];
+                    // Color the Yes button based on how risky it is
+                    const riskColor = yesWeight >= 0.7 ? C.red : yesWeight >= 0.3 ? C.amber : C.green;
+                    const activeColor = isYes ? riskColor : C.green;
+                    return (
+                      <button key={opt} onClick={() => handleAnswer(q.id, val)}
+                        style={{
+                          padding: "6px 20px", borderRadius: 6,
+                          border: `1px solid ${selected ? activeColor : C.border}`,
+                          background: selected ? activeColor + "1a" : "transparent",
+                          color: selected ? activeColor : C.textMid,
+                          fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+                          fontWeight: selected ? 700 : 400, transition: "all 0.15s",
+                        }}>
+                        {opt}
+                      </button>
+                    );
+                  })}
+                  {/* Show score impact inline */}
+                  {answered && (
+                    <span style={{ fontSize: 10, color: C.textDim, marginLeft: 4 }}>
+                      {(() => {
+                        const w = q.weights[answers[q.id]];
+                        if (w > 0) return <span style={{ color: C.amber }}>+{w.toFixed(1)} risk</span>;
+                        if (w < 0) return <span style={{ color: C.green }}>{w.toFixed(1)} risk</span>;
+                        return <span style={{ color: C.textDim }}>neutral</span>;
+                      })()}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Select — button group */}
+              {q.type === "select" && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {q.options.map(opt => {
+                    const selected = answers[q.id] === opt;
+                    const weight = q.weights[opt];
+                    const color = weight >= 0.5 ? C.red : weight > 0 ? C.amber : weight < 0 ? C.green : C.accent;
+                    return (
+                      <button key={opt} onClick={() => handleAnswer(q.id, opt)}
+                        style={{
+                          padding: "6px 12px", borderRadius: 6,
+                          border: `1px solid ${selected ? color : C.border}`,
+                          background: selected ? color + "1a" : "transparent",
+                          color: selected ? color : C.textMid,
+                          fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+                          fontWeight: selected ? 700 : 400, transition: "all 0.15s",
+                        }}>
+                        {opt}
+                        {selected && weight !== 0 && (
+                          <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.8 }}>
+                            {weight > 0 ? `+${weight.toFixed(1)}` : weight.toFixed(1)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 // ── NEW SUBMISSION ─────────────────────────────────────────────────
 function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
   const prefill = context?.draft || null;
   const [step, setStep] = useState(1);
   const [score, setScore] = useState(prefill?.score || null);
   const [showMarkets, setShowMarkets] = useState(false);
+  const [industryAnswers, setIndustryAnswers] = useState(prefill?.industryAnswers || {});  // NEW
   const [form, setForm] = useState({
     businessName: prefill?.businessName || context?.submissionAccount?.name || "",
     address: prefill?.address || "",
@@ -499,25 +720,22 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
   const STEPS = ["Insured", "Operations", "Exposure", "Coverage", "Losses", "Review"];
 
   const handleNext = () => {
-    if (step === 5) {
-      const s = computeScore(+form.naicsIdx, +form.employees, +form.hours, +form.recordable, +form.dart);
-      setScore(s);
-    }
-    setStep(s => Math.min(6, s + 1));
-  };
-
-  const handleSaveDraft = () => {
-    onSaveDraft({ ...form, score, savedAt: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }), id: prefill?.id || Date.now() });
-  };
-
-  const handleRunMarkets = () => {
-    // Compute score if not yet done
-    if (!score && form.naicsIdx !== "") {
-      const s = computeScore(+form.naicsIdx, +form.employees, +form.hours, +form.recordable, +form.dart);
-      setScore(s);
-    }
-    setShowMarkets(true);
-  };
+  if (step === 5) {
+    const s = computeScore(+form.naicsIdx, +form.employees, +form.hours, +form.recordable, +form.dart, industryAnswers);
+    setScore(s);
+  }
+  setStep(s => Math.min(6, s + 1));
+};
+const handleSaveDraft = () => {
+  onSaveDraft({ ...form, industryAnswers, score, savedAt: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }), id: prefill?.id || Date.now() });
+};
+ const handleRunMarkets = () => {
+  if (!score && form.naicsIdx !== "") {
+    const s = computeScore(+form.naicsIdx, +form.employees, +form.hours, +form.recordable, +form.dart, industryAnswers);
+    setScore(s);
+  }
+  setShowMarkets(true);
+};
 
   return (
     <div style={{ maxWidth: "100%" }}>
@@ -543,28 +761,52 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
         </>}
 
         {step === 2 && <>
-          <Sec>Step 2 — Operations</Sec>
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>What does the business do?</label>
-            <textarea value={form.description} onChange={e => set("description", e.target.value)} rows={3} placeholder="Describe primary operations..."
-              style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.text, padding: "9px 12px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>NAICS Classification</label>
-            <select value={form.naicsIdx} onChange={e => set("naicsIdx", e.target.value)}
-              style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: form.naicsIdx === "" ? C.textDim : C.text, padding: "9px 12px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none", appearance: "none" }}>
-              <option value="">— Select NAICS —</option>
-              {NAICS_DATA.map((d, i) => <option key={i} value={i}>{d.industry} [{d.naics}]</option>)}
-            </select>
-          </div>
-          {form.naicsIdx !== "" && (() => { const d = NAICS_DATA[+form.naicsIdx]; const bs = computeScore(+form.naicsIdx, 0, 1, 0, 0); return (
-            <div style={{ background: C.bg, borderRadius: 8, padding: "10px 14px", border: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div><div style={{ fontSize: 10, color: C.textDim, marginBottom: 3 }}>INDUSTRY BASELINE</div><div style={{ fontSize: 11, color: C.textMid }}>TRC {d.national_trc} · DART {d.national_dart}</div></div>
-              <ScorePill score={bs} />
-            </div>
-          ); })()}
-        </>}
+  <Sec>Step 2 — Operations</Sec>
+  <div style={{ marginBottom: 14 }}>
+    <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>What does the business do?</label>
+    <textarea value={form.description} onChange={e => set("description", e.target.value)} rows={3} placeholder="Describe primary operations..."
+      style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.text, padding: "9px 12px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
+  </div>
+  <div style={{ marginBottom: 14 }}>
+    <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>NAICS Classification</label>
+    <select value={form.naicsIdx}
+      onChange={e => { set("naicsIdx", e.target.value); setIndustryAnswers({}); }}
+      style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: form.naicsIdx === "" ? C.textDim : C.text, padding: "9px 12px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none", appearance: "none" }}>
+      <option value="">— Select NAICS —</option>
+      {NAICS_DATA.map((d, i) => <option key={i} value={i}>{d.industry} [{d.naics}]</option>)}
+    </select>
+  </div>
 
+  {/* Live score preview — updates as industry questions are answered */}
+  {form.naicsIdx !== "" && (() => {
+    const d = NAICS_DATA[+form.naicsIdx];
+    const liveScore = computeScore(+form.naicsIdx, 0, 1, 0, 0, industryAnswers);
+    const industryMod = computeIndustryModifier(+form.naicsIdx, industryAnswers);
+    return (
+      <div style={{ background: C.bg, borderRadius: 8, padding: "12px 16px", border: `1px solid ${scoreColor(liveScore)}33`, marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 3 }}>LIVE SCORE PREVIEW</div>
+          <div style={{ fontSize: 11, color: C.textMid }}>
+            Industry baseline: TRC {d.national_trc} · DART {d.national_dart}
+            {industryMod !== 0 && (
+              <span style={{ marginLeft: 10, color: industryMod > 0 ? C.amber : C.green, fontWeight: 700 }}>
+                {industryMod > 0 ? `+${industryMod.toFixed(1)}` : industryMod.toFixed(1)} from risk factors
+              </span>
+            )}
+          </div>
+        </div>
+        <ScorePill score={liveScore} />
+      </div>
+    );
+  })()}
+
+  {/* Industry-specific questions — renders when NAICS is selected */}
+  <IndustryQuestionsPanel
+    naicsIdx={form.naicsIdx}
+    answers={industryAnswers}
+    onChange={setIndustryAnswers}
+  />
+</>}
         {step === 3 && <><Sec>Step 3 — Exposure</Sec>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
             <Field label="Annual Revenue" k="revenue" ph="$0" value={form.revenue} onChange={set} />
@@ -594,24 +836,59 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
           </div>
         </>}
 
-        {step === 6 && <>
-          <Sec>Step 6 — Review & Risk Score</Sec>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-            {[["Business", form.businessName || "—"], ["Producer", form.producer], ["Industry", form.naicsIdx !== "" ? NAICS_DATA[+form.naicsIdx].industry : "—"], ["GL Limit", form.glLimit || "—"], ["Employees", form.employees || "—"], ["Losses", form.losses]].map(([k, v]) => (
-              <div key={k} style={{ background: C.bg, padding: "9px 12px", borderRadius: 6 }}>
-                <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 3 }}>{k.toUpperCase()}</div>
-                <div style={{ fontSize: 13, color: C.text }}>{v}</div>
-              </div>
-            ))}
+   {step === 6 && <>
+  <Sec>Step 6 — Review & Risk Score</Sec>
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+    {[["Business", form.businessName || "—"], ["Producer", form.producer], ["Industry", form.naicsIdx !== "" ? NAICS_DATA[+form.naicsIdx].industry : "—"], ["GL Limit", form.glLimit || "—"], ["Employees", form.employees || "—"], ["Losses", form.losses]].map(([k, v]) => (
+      <div key={k} style={{ background: C.bg, padding: "9px 12px", borderRadius: 6 }}>
+        <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 3 }}>{k.toUpperCase()}</div>
+        <div style={{ fontSize: 13, color: C.text }}>{v}</div>
+      </div>
+    ))}
+  </div>
+
+  {/* Flagged risk factors summary */}
+  {form.naicsIdx !== "" && (() => {
+    const set = INDUSTRY_QUESTIONS[+form.naicsIdx];
+    if (!set) return null;
+    const flags = set.questions.filter(q => {
+      const ans = industryAnswers[q.id];
+      return ans !== undefined && q.weights[ans] > 0.3;
+    });
+    const positives = set.questions.filter(q => {
+      const ans = industryAnswers[q.id];
+      return ans !== undefined && q.weights[ans] < 0;
+    });
+    if (flags.length === 0 && positives.length === 0) return null;
+    return (
+      <div style={{ background: C.bg, borderRadius: 8, padding: "12px 16px", marginBottom: 16, border: `1px solid ${C.border}` }}>
+        <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1.5, marginBottom: 10 }}>RISK FACTOR SUMMARY</div>
+        {flags.map(q => (
+          <div key={q.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 7 }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: q.weights[industryAnswers[q.id]] >= 0.7 ? C.red : C.amber, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: C.text }}>{q.label}</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: C.amber, fontWeight: 700 }}>+{q.weights[industryAnswers[q.id]].toFixed(1)}</span>
           </div>
-          {score && (
-            <div style={{ textAlign: "center", padding: "24px", background: C.bg, borderRadius: 10, border: `1px solid ${scoreColor(score)}33` }}>
-              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 2, marginBottom: 8 }}>CALCULATED RISK SCORE · v1</div>
-              <div style={{ fontSize: 56, fontWeight: 900, color: scoreColor(score), fontFamily: "monospace", lineHeight: 1 }}>{score.toFixed(1)}</div>
-              <div style={{ fontSize: 11, color: scoreColor(score), marginTop: 6, letterSpacing: 2 }}>{score <= 3.5 ? "LOW RISK" : score <= 6.5 ? "MODERATE RISK" : "HIGH RISK"}</div>
-            </div>
-          )}
-        </>}
+        ))}
+        {positives.map(q => (
+          <div key={q.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 7 }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: C.text }}>{q.label}</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: C.green, fontWeight: 700 }}>{q.weights[industryAnswers[q.id]].toFixed(1)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  })()}
+
+  {score && (
+    <div style={{ textAlign: "center", padding: "24px", background: C.bg, borderRadius: 10, border: `1px solid ${scoreColor(score)}33` }}>
+      <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 2, marginBottom: 8 }}>CALCULATED RISK SCORE · v1</div>
+      <div style={{ fontSize: 56, fontWeight: 900, color: scoreColor(score), fontFamily: "monospace", lineHeight: 1 }}>{score.toFixed(1)}</div>
+      <div style={{ fontSize: 11, color: scoreColor(score), marginTop: 6, letterSpacing: 2 }}>{score <= 3.5 ? "LOW RISK" : score <= 6.5 ? "MODERATE RISK" : "HIGH RISK"}</div>
+    </div>
+  )}
+</>}
 
         {/* Action buttons */}
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18 }}>

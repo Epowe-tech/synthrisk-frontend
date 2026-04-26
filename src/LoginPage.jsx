@@ -50,30 +50,28 @@ export default function LoginPage({ onLogin }) {
   const switchMode = (m) => { setMode(m); setError(""); setSuccess(""); };
 
   // ── SIGN IN ──────────────────────────────────────────────────────
-  const handleLogin = async () => {
-    if (!form.email || !form.password) { setError("Please enter your email and password."); return; }
-    setLoading(true);
-    try {
-      const { isSignedIn, nextStep } = await Auth.signIn({ username: form.email, password: form.password });
-      if (isSignedIn) {
-        const cognitoUser = await Auth.currentAuthenticatedUser();
-        const attrs = attrsToObject(await Auth.userAttributes(cognitoUser));
-        onLogin({ id: cognitoUser.username, email: attrs.email || form.email, name: attrs.name || form.email.split("@")[0], role: "producer" });
-      } else if (nextStep?.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
-        setMode("newpassword");
-        setSuccess("Please set a new permanent password to continue.");
-      } else if (nextStep?.signInStep === "CONFIRM_SIGN_UP") {
-        setPendingEmail(form.email); setMode("confirm");
-        setSuccess("Please check your email for a confirmation code.");
-      }
-    } catch (err) {
-      if (err.name === "UserNotConfirmedException") { setPendingEmail(form.email); setMode("confirm"); setError("Please confirm your email first."); }
-      else if (err.name === "NotAuthorizedException") setError("Incorrect email or password.");
-      else if (err.name === "UserNotFoundException") setError("No account found with that email.");
-      else setError(err.message || "Sign in failed. Please try again.");
+ const handleLogin = async () => {
+  if (!form.email || !form.password) { setError("Please enter your email and password."); return; }
+  setLoading(true);
+  try {
+    const user = await Auth.signIn(form.email, form.password);
+    if (user.challengeName === "NEW_PASSWORD_REQUIRED") {
+      setMode("newpassword");
+      setSuccess("Please set a new permanent password to continue.");
+    } else if (user.challengeName === "SMS_MFA" || user.challengeName === "SOFTWARE_TOKEN_MFA") {
+      setError("MFA is required — contact your administrator.");
+    } else {
+      const attrs = attrsToObject(await Auth.userAttributes(user));
+      onLogin({ id: user.username, email: attrs.email || form.email, name: attrs.name || form.email.split("@")[0], role: "producer" });
     }
-    setLoading(false);
-  };
+  } catch (err) {
+    if (err.name === "UserNotConfirmedException") { setPendingEmail(form.email); setMode("confirm"); setError("Please confirm your email first."); }
+    else if (err.name === "NotAuthorizedException") setError("Incorrect email or password.");
+    else if (err.name === "UserNotFoundException") setError("No account found with that email.");
+    else setError(err.message || "Sign in failed. Please try again.");
+  }
+  setLoading(false);
+};
 
   // ── SIGN UP ──────────────────────────────────────────────────────
   const handleSignup = async () => {
