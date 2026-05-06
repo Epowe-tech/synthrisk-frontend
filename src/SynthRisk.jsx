@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Auth } from "aws-amplify";
+import { getCurrentUser, fetchUserAttributes, signOut } from "aws-amplify/auth";
 import LoginPage from "./LoginPage.jsx";
 
 const C = {
@@ -2310,13 +2310,13 @@ export default function App() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  useEffect(() => {
+ useEffect(() => {
     async function bootstrapAuth() {
       try {
-        const currentUser = await Auth.currentAuthenticatedUser({ bypassCache: true });
-        const attributes = currentUser.attributes || {};
+        const currentUser = await getCurrentUser();
+        const attributes = await fetchUserAttributes();
         setUser({
-          id: currentUser.username,
+          id: currentUser.userId,
           email: attributes.email || currentUser.username,
           name: attributes.name || attributes.email?.split("@")[0] || currentUser.username,
           role: attributes["custom:role"] || "producer",
@@ -2354,9 +2354,9 @@ export default function App() {
     showToast(`Welcome back, ${userData.name || "Agent"}!`, "success");
   };
 
-  const handleLogout = async () => {
+const handleLogout = async () => {
     try {
-      await Auth.signOut();
+      await signOut();
     } catch (err) {
       console.warn("Sign out failed", err);
     }

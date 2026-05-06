@@ -1,7 +1,12 @@
 import { useState } from "react";
-import { Auth } from "@aws-amplify/auth";
-
-const [challengeUser, setChallengeUser] = useState(null);
+import {
+  signIn,
+  signUp,
+  confirmSignUp,
+  resetPassword,
+  confirmSignIn,
+  fetchUserAttributes,
+} from "aws-amplify/auth";
 
 const C = {
   bg: "#08090d", surface: "#0e1118", border: "#1c2030",
@@ -32,7 +37,7 @@ const LoginInputField = ({ label, type = "text", k, placeholder, suffix, value, 
 );
 
 export default function LoginPage({ onLogin }) {
-  const [mode, setMode] = useState("login"); // login | signup | confirm | forgot
+  const [mode, setMode] = useState("login"); // login | signup | confirm | forgot | newpassword
   const [form, setForm] = useState({ email: "", password: "", confirmPassword: "", name: "", inviteCode: "", confirmationCode: "", newPassword: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -41,40 +46,49 @@ export default function LoginPage({ onLogin }) {
   const [pendingEmail, setPendingEmail] = useState("");
 
   const VALID_INVITE_CODES = ["SYNTH2026", "EPOWE001"];
-  const attrsToObject = (attrs = []) => {
-    if (!Array.isArray(attrs)) return attrs || {};
-    return attrs.reduce((acc, item) => {
-      if (item.Name && item.Value) acc[item.Name] = item.Value;
-      return acc;
-    }, {});
-  };
+
   const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setError(""); };
   const switchMode = (m) => { setMode(m); setError(""); setSuccess(""); };
 
   // ── SIGN IN ──────────────────────────────────────────────────────
- const handleLogin = async () => {
-  if (!form.email || !form.password) { setError("Please enter your email and password."); return; }
-  setLoading(true);
-  try {
-    const user = await Auth.signIn(form.email, form.password);
-    if (user.challengeName === "NEW_PASSWORD_REQUIRED") {
-      setChallengeUser(user); 
-      setMode("newpassword");
-      setSuccess("Please set a new permanent password to continue.");
-    } else if (user.challengeName === "SMS_MFA" || user.challengeName === "SOFTWARE_TOKEN_MFA") {
-      setError("MFA is required — contact your administrator.");
-    } else {
-      const attrs = attrsToObject(await Auth.userAttributes(user));
-      onLogin({ id: user.username, email: attrs.email || form.email, name: attrs.name || form.email.split("@")[0], role: "producer" });
+  const handleLogin = async () => {
+    if (!form.email || !form.password) { setError("Please enter your email and password."); return; }
+    setLoading(true);
+    try {
+      const { isSignedIn, nextStep } = await signIn({
+        username: form.email,
+        password: form.password,
+      });
+
+      if (nextStep.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
+        setMode("newpassword");
+        setSuccess("Please set a new permanent password to continue.");
+      } else if (isSignedIn) {
+        const attrs = await fetchUserAttributes();
+        onLogin({
+          id: attrs.sub,
+          email: attrs.email || form.email,
+          name: attrs.name || form.email.split("@")[0],
+          role: "producer",
+        });
+      } else {
+        setError(`Unsupported next step: ${nextStep.signInStep}`);
+      }
+    } catch (err) {
+      if (err.name === "UserNotConfirmedException") {
+        setPendingEmail(form.email);
+        setMode("confirm");
+        setError("Please confirm your email first.");
+      } else if (err.name === "NotAuthorizedException") {
+        setError("Incorrect email or password.");
+      } else if (err.name === "UserNotFoundException") {
+        setError("No account found with that email.");
+      } else {
+        setError(err.message || "Sign in failed. Please try again.");
+      }
     }
-  } catch (err) {
-    if (err.name === "UserNotConfirmedException") { setPendingEmail(form.email); setMode("confirm"); setError("Please confirm your email first."); }
-    else if (err.name === "NotAuthorizedException") setError("Incorrect email or password.");
-    else if (err.name === "UserNotFoundException") setError("No account found with that email.");
-    else setError(err.message || "Sign in failed. Please try again.");
-  }
-  setLoading(false);
-};
+    setLoading(false);
+  };
 
   // ── SIGN UP ──────────────────────────────────────────────────────
   const handleSignup = async () => {
@@ -84,8 +98,15 @@ export default function LoginPage({ onLogin }) {
     if (!VALID_INVITE_CODES.includes(form.inviteCode.toUpperCase())) { setError("Invalid invite code. Contact your administrator."); return; }
     setLoading(true);
     try {
-      await Auth.signUp({ username: form.email, password: form.password, attributes: { email: form.email, name: form.name } });
-      setPendingEmail(form.email); setMode("confirm");
+      await signUp({
+        username: form.email,
+        password: form.password,
+        options: {
+          userAttributes: { email: form.email, name: form.name },
+        },
+      });
+      setPendingEmail(form.email);
+      setMode("confirm");
       setSuccess("Account created! Check your email for a 6-digit confirmation code.");
     } catch (err) {
       if (err.name === "UsernameExistsException") setError("An account with this email already exists.");
@@ -100,7 +121,10 @@ export default function LoginPage({ onLogin }) {
     if (!form.confirmationCode) { setError("Enter the confirmation code from your email."); return; }
     setLoading(true);
     try {
-      await Auth.confirmSignUp(pendingEmail || form.email, form.confirmationCode);
+      await confirmSignUp({
+        username: pendingEmail || form.email,
+        confirmationCode: form.confirmationCode,
+      });
       setSuccess("Email confirmed! You can now sign in.");
       switchMode("login");
     } catch (err) {
@@ -116,48 +140,45 @@ export default function LoginPage({ onLogin }) {
     if (!form.email) { setError("Enter your email address."); return; }
     setLoading(true);
     try {
-      await Auth.forgotPassword(form.email);
+      await resetPassword({ username: form.email });
       setSuccess(`Reset code sent to ${form.email}. Check your inbox.`);
     } catch (err) { setError(err.message || "Could not send reset email."); }
     setLoading(false);
   };
 
   // ── SET NEW PASSWORD (first login) ──────────────────────────────
-const handleNewPassword = async () => {
-  if (!form.newPassword || form.newPassword.length < 8) {
-    setError("New password must be at least 8 characters.");
-    return;
-  }
-  if (form.newPassword !== form.confirmPassword) {
-    setError("Passwords don't match.");
-    return;
-  }
-  if (!challengeUser) {
-    setError("Session lost — please sign in again with your temporary password.");
-    setMode("login");
-    return;
-  }
-  setLoading(true);
-  try {
-    // Use the challenge user from the original signIn call,
-    // NOT currentAuthenticatedUser (the user isn't fully authed yet).
-    const completedUser = await Auth.completeNewPassword(
-      challengeUser,
-      form.newPassword,
-      { name: form.name || form.email.split("@")[0] }
-    );
-    const attrs = attrsToObject(await Auth.userAttributes(completedUser));
-    onLogin({
-      id: completedUser.username,
-      email: attrs.email || form.email,
-      name: attrs.name || form.email.split("@")[0],
-      role: "producer",
-    });
-  } catch (err) {
-    setError(err.message || "Failed to set new password.");
-  }
-  setLoading(false);
-};
+  const handleNewPassword = async () => {
+    if (!form.newPassword || form.newPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    if (form.newPassword !== form.confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setLoading(true);
+    try {
+      // v6 tracks the in-progress challenge internally — no user object needed.
+      const { isSignedIn, nextStep } = await confirmSignIn({
+        challengeResponse: form.newPassword,
+      });
+      if (isSignedIn) {
+        const attrs = await fetchUserAttributes();
+        onLogin({
+          id: attrs.sub,
+          email: attrs.email || form.email,
+          name: attrs.name || form.email.split("@")[0],
+          role: "producer",
+        });
+      } else {
+        setError(`Additional step required: ${nextStep.signInStep}. Please sign in again.`);
+        setMode("login");
+      }
+    } catch (err) {
+      setError(err.message || "Failed to set new password.");
+    }
+    setLoading(false);
+  };
 
   const handleKeyDown = (e) => {
     if (e.key !== "Enter") return;
