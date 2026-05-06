@@ -159,8 +159,13 @@ export default function LoginPage({ onLogin }) {
     setLoading(true);
     try {
       // v6 tracks the in-progress challenge internally — no user object needed.
-      const { isSignedIn, nextStep } = await confirmSignIn({
+     const { isSignedIn, nextStep } = await confirmSignIn({
         challengeResponse: form.newPassword,
+        options: {
+          userAttributes: {
+            name: form.name || form.email.split("@")[0],
+          },
+        },
       });
       if (isSignedIn) {
         const attrs = await fetchUserAttributes();
