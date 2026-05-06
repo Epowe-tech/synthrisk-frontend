@@ -2310,7 +2310,7 @@ export default function App() {
     setTimeout(() => setToast(null), 3500);
   };
 
- useEffect(() => {
+useEffect(() => {
     async function bootstrapAuth() {
       try {
         const currentUser = await getCurrentUser();
@@ -2322,7 +2322,11 @@ export default function App() {
           role: attributes["custom:role"] || "producer",
         });
       } catch (err) {
-        console.warn("Auth session not found", err);
+        // Expected when no session exists yet (user is on login screen).
+        // Only log if it's an unexpected error.
+        if (err.name !== "UserUnAuthenticatedException") {
+          console.warn("Auth bootstrap failed", err);
+        }
       } finally {
         setAuthLoading(false);
       }
@@ -2330,7 +2334,7 @@ export default function App() {
 
     bootstrapAuth();
   }, []);
-
+  
   useEffect(() => {
     if (!user) return;
 
