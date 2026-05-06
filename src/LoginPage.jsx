@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Auth } from "@aws-amplify/auth";
 
+const [challengeUser, setChallengeUser] = useState(null);
+
 const C = {
   bg: "#08090d", surface: "#0e1118", border: "#1c2030",
   text: "#e8eaf0", textMid: "#7a8299", textDim: "#3a4055",
@@ -56,6 +58,7 @@ export default function LoginPage({ onLogin }) {
   try {
     const user = await Auth.signIn(form.email, form.password);
     if (user.challengeName === "NEW_PASSWORD_REQUIRED") {
+      setChallengeUser(user); 
       setMode("newpassword");
       setSuccess("Please set a new permanent password to continue.");
     } else if (user.challengeName === "SMS_MFA" || user.challengeName === "SOFTWARE_TOKEN_MFA") {
@@ -120,23 +123,41 @@ export default function LoginPage({ onLogin }) {
   };
 
   // ── SET NEW PASSWORD (first login) ──────────────────────────────
-  const handleNewPassword = async () => {
-    if (!form.newPassword || form.newPassword.length < 8) { setError("New password must be at least 8 characters."); return; }
-    if (form.newPassword !== form.confirmPassword) { setError("Passwords don't match."); return; }
-    setLoading(true);
-    try {
-      const user = await Auth.currentAuthenticatedUser();
-      await Auth.completeNewPassword(user, form.newPassword, {
-        name: form.name || form.email.split("@")[0],
-      });
-      const cognitoUser = await Auth.currentAuthenticatedUser();
-      const attrs = attrsToObject(await Auth.userAttributes(cognitoUser));
-      onLogin({ id: cognitoUser.username, email: attrs.email || form.email, name: attrs.name || form.email.split("@")[0], role: "producer" });
-    } catch (err) {
-      setError(err.message || "Failed to set new password.");
-    }
-    setLoading(false);
-  };
+const handleNewPassword = async () => {
+  if (!form.newPassword || form.newPassword.length < 8) {
+    setError("New password must be at least 8 characters.");
+    return;
+  }
+  if (form.newPassword !== form.confirmPassword) {
+    setError("Passwords don't match.");
+    return;
+  }
+  if (!challengeUser) {
+    setError("Session lost — please sign in again with your temporary password.");
+    setMode("login");
+    return;
+  }
+  setLoading(true);
+  try {
+    // Use the challenge user from the original signIn call,
+    // NOT currentAuthenticatedUser (the user isn't fully authed yet).
+    const completedUser = await Auth.completeNewPassword(
+      challengeUser,
+      form.newPassword,
+      { name: form.name || form.email.split("@")[0] }
+    );
+    const attrs = attrsToObject(await Auth.userAttributes(completedUser));
+    onLogin({
+      id: completedUser.username,
+      email: attrs.email || form.email,
+      name: attrs.name || form.email.split("@")[0],
+      role: "producer",
+    });
+  } catch (err) {
+    setError(err.message || "Failed to set new password.");
+  }
+  setLoading(false);
+};
 
   const handleKeyDown = (e) => {
     if (e.key !== "Enter") return;
