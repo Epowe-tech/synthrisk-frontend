@@ -538,7 +538,6 @@ const CATEGORY_QUESTIONS = {
   ],
   "Hospitality": [
     { id: "alcohol_pct", label: "% of Sales from Alcohol", type: "percent", placeholder: "0" },
-    { id: "other_pct", label: "% of Sales from Other Sources", type: "percent", placeholder: "0" },
     { id: "employee_count", label: "Total Employee Count", type: "number", placeholder: "0" },
     { id: "square_footage", label: "Total Square Footage", type: "number", placeholder: "0" },
   ],
@@ -556,7 +555,6 @@ const CATEGORY_RISK_QUESTIONS = {
       { id: "cat_years_operation", label: "How long has the business been operating?", type: "select", options: ["< 2 years", "2 – 5 years", "5 – 10 years", "10+ years"], weights: { "< 2 years": 0.5, "2 – 5 years": 0.2, "5 – 10 years": 0.0, "10+ years": -0.3 } },
       { id: "cat_sub_certs", label: "Are certificates of insurance required and verified for ALL subcontractors?", type: "boolean", weights: { "true": -0.4, "false": 0.7 } },
       { id: "cat_osha_history", label: "Any OSHA citations or penalties in the past 3 years?", type: "boolean", weights: { "true": 0.7, "false": -0.1 } },
-      { id: "cat_emr", label: "What is the Experience Modification Rate (EMR)?", hint: "Lower is better. 1.00 is industry average.", type: "select", options: ["< 0.85", "0.85 – 1.00", "1.00 – 1.20", "> 1.20", "Unknown / N/A"], weights: { "< 0.85": -0.5, "0.85 – 1.00": -0.1, "1.00 – 1.20": 0.3, "> 1.20": 0.8, "Unknown / N/A": 0.1 } },
       { id: "cat_highway_work", label: "Does any work occur in active highway or traffic work zones?", type: "boolean", weights: { "true": 0.5, "false": -0.1 } },
       { id: "cat_heavy_equipment", label: "Does the business own and operate heavy equipment (cranes, excavators, lifts)?", type: "boolean", weights: { "true": 0.4, "false": -0.1 } },
       { id: "cat_prior_losses", label: "Any single workers' comp loss greater than $25,000 in the past 3 years?", type: "boolean", weights: { "true": 0.6, "false": -0.2 } },
@@ -571,14 +569,12 @@ const CATEGORY_RISK_QUESTIONS = {
       { id: "cat_hazmat", label: "Are hazardous chemicals, solvents, or flammables handled or stored on-site?", type: "boolean", weights: { "true": 0.5, "false": -0.1 } },
       { id: "cat_forklifts", label: "Are forklifts or powered industrial trucks operated daily?", type: "boolean", weights: { "true": 0.3, "false": -0.1 } },
       { id: "cat_years_operation", label: "How long has the business been operating?", type: "select", options: ["< 2 years", "2 – 5 years", "5 – 10 years", "10+ years"], weights: { "< 2 years": 0.5, "2 – 5 years": 0.2, "5 – 10 years": 0.0, "10+ years": -0.3 } },
-      { id: "cat_emr", label: "What is the Experience Modification Rate (EMR)?", hint: "Lower is better. 1.00 is industry average.", type: "select", options: ["< 0.85", "0.85 – 1.00", "1.00 – 1.20", "> 1.20", "Unknown / N/A"], weights: { "< 0.85": -0.5, "0.85 – 1.00": -0.1, "1.00 – 1.20": 0.3, "> 1.20": 0.8, "Unknown / N/A": 0.1 } },
       { id: "cat_prior_losses", label: "Any single workers' comp loss greater than $25,000 in the past 3 years?", type: "boolean", weights: { "true": 0.6, "false": -0.2 } },
     ],
   },
   "Real Estate": {
     label: "Real Estate",
     questions: [
-      { id: "cat_property_age", label: "What is the age of the oldest building under management or ownership?", type: "select", options: ["< 10 years", "10 – 30 years", "30 – 50 years", "> 50 years", "N/A"], weights: { "< 10 years": -0.2, "10 – 30 years": 0.0, "30 – 50 years": 0.3, "> 50 years": 0.6, "N/A": 0.0 } },
       { id: "cat_inspection_schedule", label: "Is there a documented routine inspection schedule for all premises?", type: "boolean", weights: { "true": -0.3, "false": 0.4 } },
       { id: "cat_slip_falls", label: "Any slip-and-fall or premises liability claims in the past 3 years?", type: "boolean", weights: { "true": 0.6, "false": -0.2 } },
       { id: "cat_amenities", label: "Are there amenities like pool, gym, or playground on-premises?", type: "boolean", weights: { "true": 0.4, "false": -0.1 } },
@@ -596,7 +592,6 @@ const CATEGORY_RISK_QUESTIONS = {
       { id: "cat_entertainment", label: "Are live entertainment, DJ, or ticketed events offered?", type: "boolean", weights: { "true": 0.4, "false": -0.1 } },
       { id: "cat_prior_claims", label: "Any food-illness, slip-and-fall, or assault claims in the past 3 years?", type: "boolean", weights: { "true": 0.7, "false": -0.2 } },
       { id: "cat_years_operation", label: "How long has the business been operating?", type: "select", options: ["< 2 years", "2 – 5 years", "5 – 10 years", "10+ years"], weights: { "< 2 years": 0.5, "2 – 5 years": 0.2, "5 – 10 years": 0.0, "10+ years": -0.3 } },
-      { id: "cat_emr", label: "What is the Experience Modification Rate (EMR)?", hint: "Lower is better. 1.00 is industry average.", type: "select", options: ["< 0.85", "0.85 – 1.00", "1.00 – 1.20", "> 1.20", "Unknown / N/A"], weights: { "< 0.85": -0.5, "0.85 – 1.00": -0.1, "1.00 – 1.20": 0.3, "> 1.20": 0.8, "Unknown / N/A": 0.1 } },
       { id: "cat_security", label: "Is licensed security present during peak / high-traffic hours?", type: "boolean", weights: { "true": -0.3, "false": 0.3 } },
     ],
   },
@@ -656,9 +651,7 @@ const INDUSTRY_QUESTIONS = {
     label: "Full-Service Restaurants",
     questions: [
       { id: "alcohol_pct", label: "What % of sales is alcohol?", type: "select", options: ["0%", "1 – 25%", "26 – 50%", "> 50%"], weights: { "0%": -0.3, "1 – 25%": 0.0, "26 – 50%": 0.4, "> 50%": 0.8 } },
-      { id: "live_entertainment", label: "Is there live entertainment, dancing, or DJ?", type: "boolean", weights: { "true": 0.4, "false": -0.1 } },
       { id: "delivery_owned", label: "Does the restaurant own / operate delivery vehicles?", type: "boolean", weights: { "true": 0.5, "false": -0.1 } },
-      { id: "fryer_count", label: "How many deep fryers on-site?", type: "select", options: ["0", "1 – 2", "3 – 4", "5+"], weights: { "0": -0.3, "1 – 2": 0.0, "3 – 4": 0.2, "5+": 0.4 } },
     ],
   },
   "722410": {
@@ -932,7 +925,6 @@ const INDUSTRY_QUESTIONS = {
     questions: [
       { id: "drive_thru", label: "Is a drive-thru operated?", type: "boolean", weights: { "true": 0.4, "false": -0.1 } },
       { id: "delivery_owned", label: "Does the restaurant operate owned delivery vehicles?", type: "boolean", weights: { "true": 0.5, "false": -0.1 } },
-      { id: "fryer_count_ls", label: "How many deep fryers on-site?", type: "select", options: ["0", "1 – 2", "3 – 4", "5+"], weights: { "0": -0.2, "1 – 2": 0.0, "3 – 4": 0.3, "5+": 0.5 } },
     ],
   },
   "722515": {
