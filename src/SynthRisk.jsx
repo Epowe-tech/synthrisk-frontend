@@ -522,15 +522,10 @@ const NAICS_CATEGORIES = ["Construction", "Manufacturing", "Real Estate", "Hospi
 // Numeric exposure fields collected for every NAICS in a given category.
 const CATEGORY_QUESTIONS = {
   "Construction": [
-    { id: "revenue", label: "Annual Revenue", type: "currency", placeholder: "$0" },
-    { id: "payroll", label: "Annual Payroll", type: "currency", placeholder: "$0" },
     { id: "subcost", label: "Annual Subcontractor Cost", type: "currency", placeholder: "$0" },
   ],
   "Manufacturing": [
-    { id: "revenue", label: "Annual Revenue", type: "currency", placeholder: "$0" },
-    { id: "payroll", label: "Annual Payroll", type: "currency", placeholder: "$0" },
-    { id: "employees_ft", label: "Full-Time Employees", type: "number", placeholder: "0" },
-    { id: "employees_pt", label: "Part-Time Employees", type: "number", placeholder: "0" },
+    // employee counts handled by general "Total Employees" field
   ],
   "Real Estate": [
     { id: "units", label: "Number of Units", type: "number", placeholder: "0" },
@@ -538,7 +533,6 @@ const CATEGORY_QUESTIONS = {
   ],
   "Hospitality": [
     { id: "alcohol_pct", label: "% of Sales from Alcohol", type: "percent", placeholder: "0" },
-    { id: "employee_count", label: "Total Employee Count", type: "number", placeholder: "0" },
     { id: "square_footage", label: "Total Square Footage", type: "number", placeholder: "0" },
   ],
 };
@@ -971,7 +965,7 @@ function computeIndustryModifier(naicsCode, answers) {
   return Math.max(-3, Math.min(4, total));
 }
 
-function computeScore(naicsCode, employees, hours, rec, dart, industryAnswers = {}) {
+function computeScore(naicsCode, employees, rec, dart, industryAnswers = {}) {
   const d = getNAICSEntry(naicsCode);
   if (!d) return null;
   const maxTRC = Math.max(...NAICS_DATA.map(x => x.national_trc));
@@ -979,9 +973,12 @@ function computeScore(naicsCode, employees, hours, rec, dart, industryAnswers = 
   const norm = 0.6 * Math.log1p(d.national_trc) / Math.log1p(maxTRC)
              + 0.4 * Math.log1p(d.national_dart) / Math.log1p(maxDART);
   let base = Math.max(1, Math.min(9.9, 1 + norm * 8.9));
-  if (employees > 0 && hours > 0) {
-    const aTRC  = (rec  / hours) * 200000;
-    const aDART = (dart / hours) * 200000;
+  if (employees > 0) {
+    // OSHA-standard estimate: 2,000 hours/year per full-time employee.
+    // Used in lieu of exact hours-worked to compute incident rate per 200k hrs.
+    const estimatedHours = employees * 2000;
+    const aTRC  = (rec  / estimatedHours) * 200000;
+    const aDART = (dart / estimatedHours) * 200000;
     const adj = Math.max(-1.5, Math.min(1.5,
       0.6 * (aTRC  / d.national_trc  - 1) +
       0.4 * (aDART / d.national_dart - 1)
@@ -1693,7 +1690,6 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
     payroll: prefill?.payroll || "",
     years: prefill?.years || "",
     employees: prefill?.employees || "",
-    hours: prefill?.hours || "",
     recordable: prefill?.recordable || "",
     dart: prefill?.dart || "",
     glLimit: prefill?.glLimit || "$1,000,000",
@@ -1716,7 +1712,7 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
 
   const handleNext = () => {
     if (step === 5) {
-      const s = computeScore(form.naicsCode, +form.employees, +form.hours, +form.recordable, +form.dart, industryAnswers);
+      const s = computeScore(form.naicsCode, +form.employees, +form.recordable, +form.dart, industryAnswers);
       setScore(s);
     }
     setStep(s => Math.min(6, s + 1));
@@ -1735,7 +1731,7 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
   };
   const handleRunMarkets = () => {
     if (!score && form.naicsCode) {
-      const s = computeScore(form.naicsCode, +form.employees, +form.hours, +form.recordable, +form.dart, industryAnswers);
+      const s = computeScore(form.naicsCode, +form.employees, +form.recordable, +form.dart, industryAnswers);
       setScore(s);
     }
     setShowMarkets(true);
@@ -1800,7 +1796,7 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
   {form.naicsCode && (() => {
     const d = getNAICSEntry(form.naicsCode);
     if (!d) return null;
-    const liveScore = computeScore(form.naicsCode, 0, 1, 0, 0, industryAnswers);
+    const liveScore = computeScore(form.naicsCode, 0, 0, 0, industryAnswers);
     const industryMod = computeIndustryModifier(form.naicsCode, industryAnswers);
     return (
       <div style={{ background: C.bg, borderRadius: 8, padding: "12px 16px", border: `1px solid ${scoreColor(liveScore)}33`, marginBottom: 4, marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1828,61 +1824,45 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
   />
 </>}
         {step === 3 && <><Sec>Step 3 — Exposure</Sec>
-
-          {/* Category-specific exposure questions — only show if category is selected */}
-          {form.naicsCategory && CATEGORY_QUESTIONS[form.naicsCategory] && (
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.accent, textTransform: "uppercase", marginBottom: 10 }}>
-                ◈ {form.naicsCategory} — Industry Exposure
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 4 }}>
-                {CATEGORY_QUESTIONS[form.naicsCategory].map(q => {
-                  const isCurrency = q.type === "currency";
-                  const isPercent = q.type === "percent";
-                  return (
-                    <div key={q.id} style={{ marginBottom: 14 }}>
-                      <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>
-                        {q.label}{isPercent ? " (%)" : ""}
-                      </label>
-                      <div style={{ position: "relative" }}>
-                        {isCurrency && (
-                          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.textDim, fontSize: 13, pointerEvents: "none" }}>$</span>
-                        )}
-                        <input
-                          type={isCurrency || isPercent ? "number" : q.type}
-                          value={categoryExposure[q.id] || ""}
-                          placeholder={q.placeholder}
-                          onChange={e => handleCategoryAnswer(q.id, e.target.value)}
-                          style={{
-                            width: "100%", background: C.bg, border: `1px solid ${C.border}`,
-                            color: C.text,
-                            padding: isCurrency ? "9px 12px 9px 22px" : "9px 12px",
-                            borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none",
-                          }}
-                          onFocus={e => e.target.style.borderColor = C.accent}
-                          onBlur={e => e.target.style.borderColor = C.border}
-                        />
-                        {isPercent && (
-                          <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: C.textDim, fontSize: 13, pointerEvents: "none" }}>%</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* General exposure fields (shown for every submission) */}
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.textDim, textTransform: "uppercase", marginBottom: 10 }}>
-            General Exposure
-          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
             <Field label="Annual Revenue" k="revenue" ph="$0" value={form.revenue} onChange={set} />
             <Field label="Annual Payroll" k="payroll" ph="$0" value={form.payroll} onChange={set} />
             <Field label="Years in Business" k="years" ph="0" type="number" value={form.years} onChange={set} />
             <Field label="Total Employees" k="employees" ph="0" type="number" value={form.employees} onChange={set} />
-            <Field label="Hours Worked / Year" k="hours" ph="0" type="number" value={form.hours} onChange={set} />
+
+            {form.naicsCategory && CATEGORY_QUESTIONS[form.naicsCategory] && CATEGORY_QUESTIONS[form.naicsCategory].map(q => {
+              const isCurrency = q.type === "currency";
+              const isPercent = q.type === "percent";
+              return (
+                <div key={q.id} style={{ marginBottom: 14 }}>
+                  <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>
+                    {q.label}{isPercent ? " (%)" : ""}
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    {isCurrency && (
+                      <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.textDim, fontSize: 13, pointerEvents: "none" }}>$</span>
+                    )}
+                    <input
+                      type={isCurrency || isPercent ? "number" : q.type}
+                      value={categoryExposure[q.id] || ""}
+                      placeholder={q.placeholder}
+                      onChange={e => handleCategoryAnswer(q.id, e.target.value)}
+                      style={{
+                        width: "100%", background: C.bg, border: `1px solid ${C.border}`,
+                        color: C.text,
+                        padding: isCurrency ? "9px 12px 9px 22px" : "9px 12px",
+                        borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none",
+                      }}
+                      onFocus={e => e.target.style.borderColor = C.accent}
+                      onBlur={e => e.target.style.borderColor = C.border}
+                    />
+                    {isPercent && (
+                      <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: C.textDim, fontSize: 13, pointerEvents: "none" }}>%</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </>}
 
