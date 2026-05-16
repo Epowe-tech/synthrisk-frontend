@@ -1681,6 +1681,7 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
   const [categoryExposure, setCategoryExposure] = useState(prefill?.categoryExposure || {});
   const [form, setForm] = useState({
     businessName: prefill?.businessName || context?.submissionAccount?.name || "",
+    effectiveDate: prefill?.effectiveDate || "",
     address: prefill?.address || "",
     producer: prefill?.producer || "Demetri",
     description: prefill?.description || "",
@@ -1697,7 +1698,7 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
     losses: prefill?.losses || "No prior losses",
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const STEPS = ["Insured", "Operations", "Exposure", "Coverage", "Losses", "Review"];
+  const STEPS = ["Insured", "Operations", "Exposure", "Losses", "Review"];
 
   // Called by NAICSPicker when category or code changes
   const handleNAICSChange = (code, category) => {
@@ -1711,11 +1712,11 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
   };
 
   const handleNext = () => {
-    if (step === 5) {
+    if (step === 4) {
       const s = computeScore(form.naicsCode, +form.employees, +form.recordable, +form.dart, industryAnswers);
       setScore(s);
     }
-    setStep(s => Math.min(6, s + 1));
+    setStep(s => Math.min(5, s + 1));
   };
   const handleSaveDraft = () => {
     // Drop the migration note once the user has had a chance to fix the draft.
@@ -1774,7 +1775,10 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
 
       <Card>
         {step === 1 && <><Sec>Step 1 — Insured Information</Sec>
-          <Field label="Business Name" k="businessName" ph="ABC Plumbing" value={form.businessName} onChange={set} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+            <Field label="Business Name" k="businessName" ph="ABC Plumbing" value={form.businessName} onChange={set} />
+            <Field label="Effective Date" k="effectiveDate" type="date" value={form.effectiveDate} onChange={set} />
+          </div>
           <Field label="Address" k="address" ph="123 Main St, Phoenix AZ" value={form.address} onChange={set} />
           <Field label="Producer" k="producer" ph="Agent name" value={form.producer} onChange={set} />
         </>}
@@ -1822,6 +1826,15 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
     answers={industryAnswers}
     onChange={setIndustryAnswers}
   />
+
+  {/* Coverage limits */}
+  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.textDim, textTransform: "uppercase", margin: "18px 0 10px" }}>
+    Coverage
+  </div>
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+    <Field label="GL Limit" k="glLimit" ph="$1,000,000" value={form.glLimit} onChange={set} />
+    <Field label="Property Limit" k="propLimit" ph="$500,000" value={form.propLimit} onChange={set} />
+  </div>
 </>}
         {step === 3 && <><Sec>Step 3 — Exposure</Sec>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
@@ -1866,14 +1879,8 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
           </div>
         </>}
 
-        {step === 4 && <><Sec>Step 4 — Coverage</Sec>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-            <Field label="GL Limit" k="glLimit" ph="$1,000,000" value={form.glLimit} onChange={set} />
-            <Field label="Property Limit" k="propLimit" ph="$500,000" value={form.propLimit} onChange={set} />
-          </div>
-        </>}
 
-        {step === 5 && <><Sec>Step 5 — Loss History</Sec>
+        {step === 4 && <><Sec>Step 4 — Loss History</Sec>
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>Loss Run Notes</label>
             <textarea value={form.losses} onChange={e => set("losses", e.target.value)} rows={3}
@@ -1885,8 +1892,8 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
           </div>
         </>}
 
-   {step === 6 && <>
-  <Sec>Step 6 — Review & Risk Score</Sec>
+   {step === 5 && <>
+  <Sec>Step 5 — Review & Risk Score</Sec>
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
     {[["Business", form.businessName || "—"], ["Producer", form.producer], ["Industry", getNAICSEntry(form.naicsCode)?.industry || "—"], ["GL Limit", form.glLimit || "—"], ["Employees", form.employees || "—"], ["Losses", form.losses]].map(([k, v]) => (
       <div key={k} style={{ background: C.bg, padding: "9px 12px", borderRadius: 6 }}>
@@ -1949,7 +1956,7 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
           <Btn variant="ghost" onClick={() => setStep(s => Math.max(1, s - 1))}>← Back</Btn>
           <div style={{ display: "flex", gap: 8 }}>
             <Btn variant="ghost" onClick={handleSaveDraft}>💾 Save Draft</Btn>
-            {step < 6
+            {step < 5
               ? <Btn variant="primary" onClick={handleNext}>Next →</Btn>
               : <Btn variant="success" onClick={handleRunMarkets}>⬡ Run Markets</Btn>
             }
