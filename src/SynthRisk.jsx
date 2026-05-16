@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getCurrentUser, fetchUserAttributes, signOut } from "aws-amplify/auth";
+import { getCurrentUser, fetchUserAttributes, signOut, fetchAuthSession } from "aws-amplify/auth";
 import LoginPage from "./LoginPage.jsx";
 
 const C = {
@@ -1008,12 +1008,26 @@ function scoreColor(s) { return s <= 3.5 ? C.green : s <= 6.5 ? C.amber : C.red;
 function scoreBadge(s) { return s <= 3.5 ? "LOW" : s <= 6.5 ? "MOD" : "HIGH"; }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://pk0hs5sip3.execute-api.us-east-2.amazonaws.com";
-const JSON_HEADERS = { "Content-Type": "application/json" };
+
+// Builds headers including the Cognito JWT. The API Gateway authorizer needs this
+// to verify the user before letting the request through to the Lambda.
+async function buildAuthHeaders() {
+  const headers = { "Content-Type": "application/json" };
+  try {
+    const session = await fetchAuthSession();
+    const idToken = session.tokens?.idToken?.toString();
+    if (idToken) headers["Authorization"] = `Bearer ${idToken}`;
+  } catch (err) {
+    console.warn("Could not fetch auth session for API call", err);
+  }
+  return headers;
+}
 
 async function apiFetch(path, options = {}) {
+  const authHeaders = await buildAuthHeaders();
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: JSON_HEADERS,
     ...options,
+    headers: { ...authHeaders, ...(options.headers || {}) },
   });
 
   if (!response.ok) {
@@ -2404,10 +2418,12 @@ const handleLogout = async () => {
   };
 
   const handleSaveDraft = async (draftData, options = {}) => {
+    let apiFailed = false;
     try {
       await saveDraftApi(draftData);
     } catch (err) {
       console.warn("Draft API save failed", err);
+      apiFailed = true;
     }
 
     setDrafts(prev => {
@@ -2421,7 +2437,10 @@ const handleLogout = async () => {
     });
 
     // Suppress toast for autosaves; only show on manual Save clicks.
-    if (!options.silent) {
+    // If the cloud save failed, surface that even on autosave so the user knows.
+    if (apiFailed) {
+      showToast("Draft saved locally — cloud sync failed", "amber");
+    } else if (!options.silent) {
       showToast(`Draft saved — "${draftData.businessName || "Untitled"}"`, "amber");
     }
   };
