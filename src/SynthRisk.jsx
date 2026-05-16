@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getCurrentUser, fetchUserAttributes, signOut } from "aws-amplify/auth";
 import LoginPage from "./LoginPage.jsx";
 
@@ -1256,7 +1256,7 @@ const NAV = [
   { id: "markets", icon: "◈", label: "Markets" },
 ];
 
-function Sidebar({ page, setPage, draftCount, user, onLogout }) {
+function Sidebar({ page, setPage, setContext, draftCount, user, onLogout }) {
   return (
     <div style={{ width: 210, minHeight: "100vh", background: C.surface, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, zIndex: 100 }}>
       <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.border}` }}>
@@ -1273,7 +1273,10 @@ function Sidebar({ page, setPage, draftCount, user, onLogout }) {
           const active = page === item.id || (item.id === "pipeline" && page === "submission-workspace") || (item.id === "accounts" && page === "account-workspace");
           const badge = item.id === "pipeline" ? (SEED_PIPELINE.length + draftCount) : null;
           return (
-            <button key={item.id} onClick={() => setPage(item.id)}
+            <button key={item.id} onClick={() => {
+                if (item.id === "new-submission") setContext({});
+                setPage(item.id);
+              }}
               style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 7, border: "none", cursor: "pointer", background: active ? C.accentGlow : "transparent", color: active ? C.accent : C.textMid, fontSize: 13, fontFamily: "inherit", fontWeight: active ? 700 : 400, marginBottom: 2, textAlign: "left" }}>
               <span style={{ fontSize: 14, width: 18, textAlign: "center" }}>{item.icon}</span>
               {item.label}
@@ -1360,14 +1363,17 @@ function HomePage({ setPage, setContext, drafts, user }) {
             rows={renewals.map(a => [
               <b style={{ color: C.text }}>{a.name}</b>,
               <span style={{ color: C.amber, fontWeight: 600 }}>{a.renewal}</span>,
-              <Btn small onClick={() => setPage("new-submission")}>Renew</Btn>
+              <Btn small onClick={() => { setContext({}); setPage("new-submission"); }}>Renew</Btn>
             ])} />
         </Card>
         <Card>
           <Sec>Quick Actions</Sec>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {[{ l: "+ New Submission", p: "new-submission", v: "primary" }, { l: "+ Add Account", p: "accounts", v: "ghost" }, { l: "Open Pipeline", p: "pipeline", v: "ghost" }, { l: "Market Finder", p: "markets", v: "ghost" }].map(a => (
-              <Btn key={a.l} variant={a.v} full onClick={() => setPage(a.p)}>{a.l}</Btn>
+              <Btn key={a.l} variant={a.v} full onClick={() => {
+                if (a.p === "new-submission") setContext({});
+                setPage(a.p);
+              }}>{a.l}</Btn>
             ))}
           </div>
         </Card>
@@ -1679,6 +1685,14 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
   const [showMarkets, setShowMarkets] = useState(false);
   const [industryAnswers, setIndustryAnswers] = useState(prefill?.industryAnswers || {});
   const [categoryExposure, setCategoryExposure] = useState(prefill?.categoryExposure || {});
+
+  // Stable identity for this draft. Initialized from prefill when resuming,
+  // generated on first save when starting fresh. Reused for every subsequent
+  // save (manual or auto) so the upsert in the parent matches one record.
+  const [draftId, setDraftId] = useState(prefill?.id || null);
+  const [autosaveAt, setAutosaveAt] = useState(null);
+  const autosaveTimerRef = useRef(null);
+  const skipInitialAutosaveRef = useRef(true);
   const [form, setForm] = useState({
     businessName: prefill?.businessName || context?.submissionAccount?.name || "",
     effectiveDate: prefill?.effectiveDate || "",
@@ -1718,18 +1732,54 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
     }
     setStep(s => Math.min(5, s + 1));
   };
-  const handleSaveDraft = () => {
-    // Drop the migration note once the user has had a chance to fix the draft.
-    onSaveDraft({
-      ...form,
-      industryAnswers,
-      categoryExposure,
-      score,
-      savedAt: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      id: prefill?.id || Date.now(),
-      _migrationNote: form.naicsCode ? undefined : prefill?._migrationNote,
-    });
+  // Builds the draft payload. Pulled out so manual save and autosave share it.
+  const buildDraftPayload = (id) => ({
+    ...form,
+    industryAnswers,
+    categoryExposure,
+    score,
+    savedAt: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+    id,
+    _migrationNote: form.naicsCode ? undefined : prefill?._migrationNote,
+  });
+
+  const handleSaveDraft = async () => {
+    // Generate an id the first time, then reuse it forever for this session.
+    const id = draftId || Date.now();
+    if (!draftId) setDraftId(id);
+    await onSaveDraft(buildDraftPayload(id));
   };
+
+  // ── AUTOSAVE ──────────────────────────────────────────────────────
+  // Kicks in after the user advances past Step 1. Debounced 1.5s so we don't
+  // hammer the API on every keystroke. Reuses draftId so saves overwrite the
+  // same record. Silent — no toast — to avoid notification spam.
+  useEffect(() => {
+    // Skip the initial render so we don't fire a save just for mounting.
+    if (skipInitialAutosaveRef.current) {
+      skipInitialAutosaveRef.current = false;
+      return;
+    }
+    // Only autosave once the user has completed Step 1.
+    if (step < 2) return;
+    // Don't autosave an empty draft.
+    if (!form.businessName) return;
+
+    clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(async () => {
+      const id = draftId || Date.now();
+      if (!draftId) setDraftId(id);
+      try {
+        await onSaveDraft(buildDraftPayload(id), { silent: true });
+        setAutosaveAt(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }));
+      } catch (err) {
+        console.warn("Autosave failed", err);
+      }
+    }, 1500);
+
+    return () => clearTimeout(autosaveTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, industryAnswers, categoryExposure, step, score]);
   const handleRunMarkets = () => {
     if (!score && form.naicsCode) {
       const s = computeScore(form.naicsCode, +form.employees, +form.recordable, +form.dart, industryAnswers);
@@ -1952,9 +2002,14 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
 </>}
 
         {/* Action buttons */}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18, alignItems: "center" }}>
           <Btn variant="ghost" onClick={() => setStep(s => Math.max(1, s - 1))}>← Back</Btn>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {autosaveAt && (
+              <span style={{ fontSize: 11, color: C.textDim, marginRight: 4 }}>
+                Autosaved {autosaveAt}
+              </span>
+            )}
             <Btn variant="ghost" onClick={handleSaveDraft}>💾 Save Draft</Btn>
             {step < 5
               ? <Btn variant="primary" onClick={handleNext}>Next →</Btn>
@@ -1996,7 +2051,7 @@ function PipelinePage({ setPage, setContext, drafts, onResumeDraft, onDeleteDraf
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {["kanban", "table"].map(v => <button key={v} onClick={() => setView(v)} style={{ padding: "7px 14px", borderRadius: 6, border: `1px solid ${C.border}`, background: view === v ? C.accentGlow : "transparent", color: view === v ? C.accent : C.textMid, fontSize: 11, fontFamily: "inherit", cursor: "pointer", fontWeight: view === v ? 700 : 400 }}>{v === "kanban" ? "⊞ Kanban" : "≡ Table"}</button>)}
-          <Btn variant="primary" onClick={() => setPage("new-submission")}>+ New</Btn>
+          <Btn variant="primary" onClick={() => { setContext({}); setPage("new-submission"); }}>+ New</Btn>
         </div>
       </div>
 
@@ -2348,7 +2403,7 @@ const handleLogout = async () => {
     showToast("Signed out", "success");
   };
 
-  const handleSaveDraft = async (draftData) => {
+  const handleSaveDraft = async (draftData, options = {}) => {
     try {
       await saveDraftApi(draftData);
     } catch (err) {
@@ -2364,7 +2419,11 @@ const handleLogout = async () => {
       }
       return [...prev, draftData];
     });
-    showToast(`Draft saved — "${draftData.businessName || "Untitled"}"`, "amber");
+
+    // Suppress toast for autosaves; only show on manual Save clicks.
+    if (!options.silent) {
+      showToast(`Draft saved — "${draftData.businessName || "Untitled"}"`, "amber");
+    }
   };
 
   const handleResumeDraft = (draftData) => {
@@ -2429,7 +2488,7 @@ const handleLogout = async () => {
         tr:hover td { background: rgba(61,142,248,0.03); }
         @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
-      <Sidebar page={page} setPage={nav} draftCount={drafts.length} user={user} onLogout={handleLogout} />
+      <Sidebar page={page} setPage={nav} setContext={setContext} draftCount={drafts.length} user={user} onLogout={handleLogout} />
       <main style={{ marginLeft: 210, padding: "28px 32px", minHeight: "100vh", width: "calc(100vw - 210px)" }}>
         {pages[page] || pages["home"]}
       </main>
