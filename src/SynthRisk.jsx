@@ -1405,6 +1405,44 @@ const Field = ({ label, k, ph, type = "text", value, onChange }) => (
       onFocus={e => e.target.style.borderColor = C.accent} onBlur={e => e.target.style.borderColor = C.border} />
   </div>
 );
+// ── LIMIT OPTIONS ──────────────────────────────────────────────────
+// Stored value matches the existing "$1,000,000" string format so older
+// drafts and the scoring Lambda keep working without migration.
+const formatStoredLimit = (n) => `$${n.toLocaleString("en-US")}`;
+const formatDisplayLimit = (n) =>
+  n >= 1_000_000
+    ? `$${n / 1_000_000 % 1 === 0 ? n / 1_000_000 : (n / 1_000_000).toFixed(1)}M`
+    : `$${(n / 1000).toFixed(0)}K`;
+
+// GL: $1M → $10M in $1M increments
+const GL_LIMIT_OPTIONS = Array.from({ length: 10 }, (_, i) => (i + 1) * 1_000_000);
+// Property: $500K → $10M in $500K increments
+const PROP_LIMIT_OPTIONS = Array.from({ length: 20 }, (_, i) => (i + 1) * 500_000);
+
+// ── SELECT (outside component to prevent remount) ──────────────────
+const Select = ({ label, k, value, options, onChange, placeholder = "Select…" }) => (
+  <div style={{ marginBottom: 14 }}>
+    <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>{label}</label>
+    <select
+      value={value || ""}
+      onChange={e => onChange(k, e.target.value)}
+      style={{
+        width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.text,
+        padding: "9px 32px 9px 12px", borderRadius: 6, fontSize: 13, fontFamily: "inherit",
+        outline: "none", cursor: "pointer", appearance: "none", WebkitAppearance: "none",
+        backgroundImage: `url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%237b8497' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E")`,
+        backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center",
+      }}
+      onFocus={e => e.target.style.borderColor = C.accent}
+      onBlur={e => e.target.style.borderColor = C.border}
+    >
+      <option value="" disabled>{placeholder}</option>
+      {options.map(n => (
+        <option key={n} value={formatStoredLimit(n)}>{formatDisplayLimit(n)}</option>
+      ))}
+    </select>
+  </div>
+);
 // ── NAICS PICKER ──────────────────────────────────────────────────
 // Two-step picker: pick category first (4 buttons), then text-search & pick a NAICS code.
 // Defined outside NewSubmissionPage to prevent remounting (which would lose the search input focus).
@@ -1896,8 +1934,22 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
     Coverage
   </div>
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-    <Field label="GL Limit" k="glLimit" ph="$1,000,000" value={form.glLimit} onChange={set} />
-    <Field label="Property Limit" k="propLimit" ph="$500,000" value={form.propLimit} onChange={set} />
+    <Select
+      label="GL Limit"
+      k="glLimit"
+      value={form.glLimit}
+      options={GL_LIMIT_OPTIONS}
+      onChange={set}
+      placeholder="Select GL limit…"
+    />
+    <Select
+      label="Property Limit"
+      k="propLimit"
+      value={form.propLimit}
+      options={PROP_LIMIT_OPTIONS}
+      onChange={set}
+      placeholder="Select property limit…"
+    />
   </div>
 </>}
         {step === 3 && <><Sec>Step 3 — Exposure</Sec>
