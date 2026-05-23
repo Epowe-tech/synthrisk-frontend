@@ -2502,14 +2502,19 @@ const handleLogout = async () => {
   };
 
   const handleDeleteDraft = async (draftId) => {
+    // Optimistic UI: remove immediately for snappy feel
+    const previousDrafts = drafts;
+    setDrafts(prev => prev.filter(d => d.id !== draftId));
+
     try {
       await deleteDraftApi(draftId);
+      showToast("Draft deleted", "success");
     } catch (err) {
-      console.warn("Draft API delete failed", err);
+      // Roll back the optimistic update — the draft is still in DynamoDB
+      setDrafts(previousDrafts);
+      showToast(`Delete failed: ${err.message}`, "danger");
+      console.error("Draft API delete failed", err);
     }
-
-    setDrafts(prev => prev.filter(d => d.id !== draftId));
-    showToast("Draft deleted", "success");
   };
 
   const handleRunMarkets = async (marketName, form) => {
