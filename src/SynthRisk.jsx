@@ -1054,6 +1054,10 @@ async function saveSubmissionApi(submission) {
   return apiFetch("/submissions", { method: "POST", body: JSON.stringify(submission) });
 }
 
+async function fetchSubmissionsApi() {
+  return apiFetch("/submissions");
+}
+
 async function sendMarketApi(marketName, form, score) {
   return apiFetch("/markets/send", { method: "POST", body: JSON.stringify({ marketName, form, score }) });
 }
@@ -1141,19 +1145,24 @@ function RunMarketsModal({ form, score, onClose, onSent }) {
   const [sentMarkets, setSentMarkets] = useState({});
   const [sending, setSending] = useState(null);
 
-  const handleSend = (marketName) => {
+  const handleSend = async (marketName) => {
     setSending(marketName);
-    // TODO: Replace this timeout with your real AWS API call:
-    // await fetch('https://your-api-gateway.amazonaws.com/prod/send-to-market', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ submission: form, market: marketName, score })
-    // });
-    setTimeout(() => {
-      setSentMarkets(prev => ({ ...prev, [marketName]: { date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }), status: "Sent" } }));
+    try {
+      // Parent owns the actual API calls (saveSubmission + sendMarket).
+      // Modal just tracks UI state.
+      const result = await onSent(marketName);
+      if (result?.ok) {
+        setSentMarkets(prev => ({
+          ...prev,
+          [marketName]: {
+            date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            status: "Sent",
+          },
+        }));
+      }
+    } finally {
       setSending(null);
-      onSent(marketName);
-    }, 1200);
+    }
   };
 
   return (
@@ -1266,6 +1275,7 @@ const NAV = [
   { id: "home", icon: "⌂", label: "Home" },
   { id: "new-submission", icon: "＋", label: "New Submission" },
   { id: "pipeline", icon: "◫", label: "Pipeline" },
+  { id: "submissions", icon: "▤", label: "Submissions" },
   { id: "accounts", icon: "◉", label: "Accounts" },
   { id: "markets", icon: "◈", label: "Markets" },
 ];
@@ -2091,7 +2101,7 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
           form={form}
           score={score}
           onClose={() => setShowMarkets(false)}
-          onSent={(marketName) => onRunMarkets && onRunMarkets(marketName, form)}
+          onSent={(marketName) => onRunMarkets && onRunMarkets(marketName, form, score)}
         />
       )}
     </div>
@@ -2164,6 +2174,92 @@ function PipelinePage({ setPage, setContext, drafts, onResumeDraft, onDeleteDraf
               <span style={{ fontSize: 11, color: C.textMid }}>{p.next}</span>,
               p.isDraft ? <Btn small danger onClick={() => onDeleteDraft(p.draftData.id)}>Delete</Btn> : null
             ])} />
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── SUBMISSIONS LIST ───────────────────────────────────────────────
+function SubmissionsPage({ submissions, onRefresh }) {
+  const [search, setSearch] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const filtered = submissions.filter(s => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      (s.srNumber || "").toLowerCase().includes(q) ||
+      (s.businessName || "").toLowerCase().includes(q) ||
+      (s.producer || "").toLowerCase().includes(q)
+    );
+  });
+
+  const sorted = [...filtered].sort((a, b) =>
+    (b.createdAt || "").localeCompare(a.createdAt || "")
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Submissions</div>
+          <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>
+            {submissions.length} total · search by SR#, business, or producer
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            placeholder="Search submissions..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: "8px 13px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none", width: 240 }}
+          />
+          <Btn variant="ghost" onClick={handleRefresh} disabled={refreshing}>
+            {refreshing ? "Refreshing..." : "↻ Refresh"}
+          </Btn>
+        </div>
+      </div>
+
+      {sorted.length === 0 ? (
+        <Card style={{ textAlign: "center", padding: "40px" }}>
+          <div style={{ color: C.textDim, marginBottom: 14 }}>
+            {submissions.length === 0
+              ? "No submissions yet. Convert a draft via Run Markets to create your first one."
+              : `No submissions match "${search}"`}
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <DataTable
+            headers={["SR Number", "Business", "Stage", "Score", "Created", "PDF"]}
+            rows={sorted.map(s => [
+              <span style={{ fontFamily: "monospace", fontWeight: 700, color: C.accent }}>{s.srNumber || "—"}</span>,
+              <b style={{ color: C.text }}>{s.businessName || "Untitled"}</b>,
+              <Tag color={C.amber}>{s.stage || "Marketing"}</Tag>,
+              s.score ? <ScorePill score={parseFloat(s.score)} /> : <span style={{ color: C.textDim }}>—</span>,
+              <span style={{ fontSize: 11, color: C.textMid }}>
+                {s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+              </span>,
+              s.pdfUrl ? (
+                <a href={s.pdfUrl} target="_blank" rel="noopener noreferrer"
+                   style={{ color: C.green, fontSize: 12, fontWeight: 600, textDecoration: "none" }}>
+                  Download ↓
+                </a>
+              ) : (
+                <span style={{ fontSize: 11, color: C.textDim }}>Generating...</span>
+              )
+            ])}
+          />
         </Card>
       )}
     </div>
@@ -2398,7 +2494,9 @@ function MarketsPage() {
 export default function App() {
   const [page, setPage] = useState("home");
   const [context, setContext] = useState({});
+  const [activeSubmissionId, setActiveSubmissionId] = useState(null);
   const [drafts, setDrafts] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
   const [toast, setToast] = useState(null);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -2445,11 +2543,23 @@ useEffect(() => {
         const migrated = list.map(migrateLegacyDraft);
         setDrafts(migrated);
       } catch (err) {
-        console.warn("Draft load failed, using local state", err);
+        console.error("Draft load failed", err);
+        showToast(`Couldn't load drafts from server. Working offline.`, "red");
+      }
+    }
+
+    async function loadSubmissions() {
+      try {
+        const savedSubmissions = await fetchSubmissionsApi();
+        setSubmissions(Array.isArray(savedSubmissions) ? savedSubmissions : []);
+      } catch (err) {
+        console.error("Submission load failed", err);
+        // Don't toast — drafts toast already covers connectivity issues
       }
     }
 
     loadDrafts();
+    loadSubmissions();
   }, [user]);
 
   const handleLogin = (userData) => {
@@ -2512,25 +2622,61 @@ const handleLogout = async () => {
     } catch (err) {
       // Roll back the optimistic update — the draft is still in DynamoDB
       setDrafts(previousDrafts);
-      showToast(`Delete failed: ${err.message}`, "danger");
+      showToast(`Delete failed: ${err.message}`, "red");
       console.error("Draft API delete failed", err);
     }
   };
 
-  const handleRunMarkets = async (marketName, form) => {
+  const handleRunMarkets = async (marketName, form, score) => {
     try {
-      await sendMarketApi(marketName, form, form?.score || 0);
-    } catch (err) {
-      console.warn("Send market API failed", err);
-    }
+      // First market send for this submission? Persist it to DynamoDB.
+      // Subsequent sends reuse the same submissionId so we don't duplicate.
+      let submissionIdToUse = activeSubmissionId;
+      if (!submissionIdToUse) {
+        const result = await saveSubmissionApi({
+          ...form,
+          score,
+          draftId: form.id,
+          stage: "Marketing",
+        });
+        submissionIdToUse = result.submissionId;
+        setActiveSubmissionId(submissionIdToUse);
 
-    showToast(`Sent to ${marketName} ✓`, "success");
+        // Submission just got created — refetch the list so the new row appears.
+        // PDF generation runs async; UI will pick up the pdfUrl on next refresh.
+        try {
+          const savedSubmissions = await fetchSubmissionsApi();
+          setSubmissions(Array.isArray(savedSubmissions) ? savedSubmissions : []);
+        } catch (refetchErr) {
+          console.warn("Submission refetch failed", refetchErr);
+        }
+      }
+
+      await sendMarketApi(marketName, form, score);
+
+      showToast(`Sent to ${marketName} ✓`, "success");
+      return { ok: true };
+    } catch (err) {
+      console.error("Run market failed", err);
+      showToast(`Send to ${marketName} failed: ${err.message}`, "red");
+      return { ok: false };
+    }
   };
+
+  useEffect(() => {
+    if (page === "new-submission") {
+      setActiveSubmissionId(null);
+    }
+  }, [page, context]);
 
   const pages = {
     home: <HomePage setPage={nav} setContext={setContext} drafts={drafts} user={user} />,
     "new-submission": <NewSubmissionPage context={context} onSaveDraft={handleSaveDraft} onRunMarkets={handleRunMarkets} />,
     pipeline: <PipelinePage setPage={nav} setContext={setContext} drafts={drafts} onResumeDraft={handleResumeDraft} onDeleteDraft={handleDeleteDraft} />,
+    submissions: <SubmissionsPage submissions={submissions} onRefresh={async () => {
+      const result = await fetchSubmissionsApi();
+      setSubmissions(Array.isArray(result) ? result : []);
+    }} />,
     "submission-workspace": <SubmissionWorkspacePage context={context} setPage={nav} setContext={setContext} />,
     accounts: <AccountsPage setPage={nav} setContext={setContext} />,
     "account-workspace": <AccountWorkspacePage context={context} setPage={nav} setContext={setContext} />,
