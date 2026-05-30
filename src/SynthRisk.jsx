@@ -965,28 +965,92 @@ function computeIndustryModifier(naicsCode, answers) {
   return Math.max(-3, Math.min(4, total));
 }
 
-function computeScore(naicsCode, employees, rec, dart, industryAnswers = {}) {
+function computeScoreDetailed(naicsCode, employees, rec, dart, industryAnswers = {}) {
   const d = getNAICSEntry(naicsCode);
   if (!d) return null;
+
+  // Layer 0 — NAICS industry baseline
   const maxTRC = Math.max(...NAICS_DATA.map(x => x.national_trc));
   const maxDART = Math.max(...NAICS_DATA.map(x => x.national_dart));
   const norm = 0.6 * Math.log1p(d.national_trc) / Math.log1p(maxTRC)
              + 0.4 * Math.log1p(d.national_dart) / Math.log1p(maxDART);
-  let base = Math.max(1, Math.min(9.9, 1 + norm * 8.9));
+  const baseline = Math.max(1, Math.min(9.9, 1 + norm * 8.9));
+
+  // Layer 1 — employee / loss-experience adjustment
+  let adjustment = null;            // null = not applied (no employee count)
+  let baseAfterAdj = baseline;
   if (employees > 0) {
-    // OSHA-standard estimate: 2,000 hours/year per full-time employee.
-    // Used in lieu of exact hours-worked to compute incident rate per 200k hrs.
     const estimatedHours = employees * 2000;
     const aTRC  = (rec  / estimatedHours) * 200000;
     const aDART = (dart / estimatedHours) * 200000;
-    const adj = Math.max(-1.5, Math.min(1.5,
+    adjustment = Math.max(-1.5, Math.min(1.5,
       0.6 * (aTRC  / d.national_trc  - 1) +
       0.4 * (aDART / d.national_dart - 1)
     ));
-    base = Math.max(1, Math.min(9.9, base + adj));
+    baseAfterAdj = Math.max(1, Math.min(9.9, baseline + adjustment));
   }
-  const industryMod = computeIndustryModifier(naicsCode, industryAnswers);
-  return Math.max(1, Math.min(9.9, base + industryMod));
+
+  // Layer 2 — weighted risk-factor questions, captured per section
+  const humanize = (q, ans) =>
+    q.type === "boolean" ? (ans === "true" ? "Yes" : "No") : ans;
+
+  const buildSection = (set, title) => {
+    if (!set) return null;
+    const items = [];
+    for (const q of set.questions) {
+      const ans = industryAnswers[q.id];
+      if (ans !== undefined && ans !== "" && q.weights[ans] !== undefined) {
+        items.push({ question: q.label, answer: humanize(q, ans), impact: q.weights[ans] });
+      }
+    }
+    if (items.length === 0) return null;
+    const subtotal = items.reduce((sum, it) => sum + it.impact, 0);
+    return { title, items, subtotal };
+  };
+
+  const sections = [];
+  const catSection = buildSection(
+    CATEGORY_RISK_QUESTIONS[d.category],
+    `${d.category} — General Risk Factors`
+  );
+  if (catSection) sections.push(catSection);
+
+  const codeSet = INDUSTRY_QUESTIONS[naicsCode];
+  const codeSection = buildSection(
+    codeSet,
+    `${codeSet?.label || d.industry} — Specific Risk Factors`
+  );
+  if (codeSection) sections.push(codeSection);
+
+  const modifierRaw = sections.reduce((sum, s) => sum + s.subtotal, 0);
+  const modifierApplied = Math.max(-3, Math.min(4, modifierRaw));
+
+  // Final — identical clamp chain to the original computeScore
+  const finalScore = Math.max(1, Math.min(9.9, baseAfterAdj + modifierApplied));
+
+  const round = (n, p = 2) => Number(n.toFixed(p));
+  const breakdown = {
+    naicsCode,
+    naicsIndustry: d.industry,
+    baseline: round(baseline),
+    adjustment: adjustment === null ? null : round(adjustment),
+    sections: sections.map(s => ({
+      title: s.title,
+      items: s.items.map(it => ({ ...it, impact: round(it.impact) })),
+      subtotal: round(s.subtotal),
+    })),
+    modifierRaw: round(modifierRaw),
+    modifierApplied: round(modifierApplied),
+    finalScore: round(finalScore, 1),
+    modifierCapped: modifierRaw !== modifierApplied,
+  };
+
+  return { finalScore, breakdown };
+}
+
+function computeScore(naicsCode, employees, rec, dart, industryAnswers = {}) {
+  const detailed = computeScoreDetailed(naicsCode, employees, rec, dart, industryAnswers);
+  return detailed ? detailed.finalScore : null;
 }
 
 function matchMarkets(form) {
