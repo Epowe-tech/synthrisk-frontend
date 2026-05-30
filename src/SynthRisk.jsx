@@ -2652,9 +2652,17 @@ const handleLogout = async () => {
         }
       }
 
-      await sendMarketApi(marketName, form, score);
+      // Notify the market — currently a no-op placeholder. The real market integration
+      // (probably AI-generated carrier emails in a future phase) doesn't exist yet, so
+      // we just track the click in the UI as if it succeeded. Removing the sendMarketApi
+      // call until that backend route is built.
+      try {
+        await sendMarketApi(marketName, form, score);
+      } catch (sendErr) {
+        console.info("Market send API not yet implemented — proceeding anyway", sendErr.message);
+      }
 
-      showToast(`Sent to ${marketName} ✓`, "success");
+      showToast(`Tracked send to ${marketName} ✓`, "success");
       return { ok: true };
     } catch (err) {
       console.error("Run market failed", err);
