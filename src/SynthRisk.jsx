@@ -1914,6 +1914,16 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
     setShowMarkets(true);
   };
 
+  // Built fresh at send time from the same inputs the score uses, so the
+  // breakdown always matches the headline score on this submission.
+  const buildRiskBreakdown = () => {
+    if (!form.naicsCode) return null;
+    const detailed = computeScoreDetailed(
+      form.naicsCode, +form.employees, +form.recordable, +form.dart, industryAnswers
+    );
+    return detailed ? detailed.breakdown : null;
+  };
+
   return (
     <div style={{ maxWidth: "100%" }}>
       <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}>
@@ -2165,7 +2175,7 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
           form={form}
           score={score}
           onClose={() => setShowMarkets(false)}
-          onSent={(marketName) => onRunMarkets && onRunMarkets(marketName, form, score)}
+          onSent={(marketName) => onRunMarkets && onRunMarkets(marketName, form, score, buildRiskBreakdown())}
         />
       )}
     </div>
@@ -2691,7 +2701,7 @@ const handleLogout = async () => {
     }
   };
 
-  const handleRunMarkets = async (marketName, form, score) => {
+  const handleRunMarkets = async (marketName, form, score, riskBreakdown = null) => {
     try {
       // First market send for this submission? Persist it to DynamoDB.
       // Subsequent sends reuse the same submissionId so we don't duplicate.
@@ -2700,6 +2710,7 @@ const handleLogout = async () => {
         const result = await saveSubmissionApi({
           ...form,
           score,
+          riskBreakdown,
           draftId: form.id,
           stage: "Marketing",
         });
