@@ -288,19 +288,11 @@ export default function LoginPage({ onLogin }) {
           </button>
 
           <div style={{ textAlign: "center", fontSize: 13, color: C.textMid }}>
-            {mode === "login" && <>Don't have an account? <button onClick={() => switchMode("signup")} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 600 }}>Request access</button></>}
             {mode === "signup" && <>Already have an account? <button onClick={() => switchMode("login")} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 600 }}>Sign in</button></>}
             {mode === "confirm" && <>Already confirmed? <button onClick={() => switchMode("login")} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 600 }}>Sign in</button></>}
             {mode === "forgot" && <button onClick={() => switchMode("login")} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 600 }}>← Back to sign in</button>}
           </div>
 
-          <div style={{ marginTop: 28, padding: "12px 14px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8 }}>
-            <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1.5, marginBottom: 6, fontWeight: 700 }}>LIVE AUTH — AWS COGNITO</div>
-            <div style={{ fontSize: 11, color: C.textMid, lineHeight: 1.6 }}>
-              Create a real account using Request Access.<br />
-              Admin invite code: <span style={{ color: C.accent, fontFamily: "monospace" }}>SYNTH2026</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
