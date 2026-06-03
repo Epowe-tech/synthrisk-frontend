@@ -1809,7 +1809,7 @@ const IndustryQuestionsPanel = ({ naicsCode, answers, onChange }) => {
   );
 };
 // ── NEW SUBMISSION ─────────────────────────────────────────────────
-function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
+function NewSubmissionPage({ context, user, onSaveDraft, onRunMarkets }) {
   const prefill = context?.draft || null;
   const [step, setStep] = useState(1);
   const [score, setScore] = useState(prefill?.score || null);
@@ -1828,7 +1828,7 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
     businessName: prefill?.businessName || context?.submissionAccount?.name || "",
     effectiveDate: prefill?.effectiveDate || "",
     address: prefill?.address || "",
-    producer: prefill?.producer || "Demetri",
+    producer: prefill?.producer || user?.name || "",
     description: prefill?.description || "",
     naicsCode: prefill?.naicsCode || "",
     naicsCategory: prefill?.naicsCategory || "",
@@ -1838,9 +1838,9 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
     employees: prefill?.employees || "",
     recordable: prefill?.recordable || "",
     dart: prefill?.dart || "",
-    glLimit: prefill?.glLimit || "$1,000,000",
+    glLimit: prefill?.glLimit || "",
     propLimit: prefill?.propLimit || "",
-    losses: prefill?.losses || "No prior losses",
+    losses: prefill?.losses || "",
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const STEPS = ["Insured", "Operations", "Exposure", "Losses", "Review"];
@@ -1967,11 +1967,11 @@ function NewSubmissionPage({ context, onSaveDraft, onRunMarkets }) {
       <Card>
         {step === 1 && <><Sec>Step 1 — Insured Information</Sec>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-            <Field label="Business Name" k="businessName" ph="ABC Plumbing" value={form.businessName} onChange={set} />
+            <Field label="Business Name" k="businessName" ph="Enter business name" value={form.businessName} onChange={set} />
             <Field label="Effective Date" k="effectiveDate" type="date" value={form.effectiveDate} onChange={set} />
           </div>
-          <Field label="Address" k="address" ph="123 Main St, Phoenix AZ" value={form.address} onChange={set} />
-          <Field label="Producer" k="producer" ph="Agent name" value={form.producer} onChange={set} />
+          <Field label="Address" k="address" ph="Street, City, State" value={form.address} onChange={set} />
+          <Field label="Producer" k="producer" ph="Producer name" value={form.producer} onChange={set} />
         </>}
 
         {step === 2 && <>
@@ -2777,7 +2777,7 @@ const handleLogout = async () => {
 
   const pages = {
     home: <HomePage setPage={nav} setContext={setContext} drafts={drafts} submissions={submissions} user={user} />,
-    "new-submission": <NewSubmissionPage context={context} onSaveDraft={handleSaveDraft} onRunMarkets={handleRunMarkets} />,
+    "new-submission": <NewSubmissionPage context={context} user={user} onSaveDraft={handleSaveDraft} onRunMarkets={handleRunMarkets} />,
     pipeline: <PipelinePage setPage={nav} setContext={setContext} drafts={drafts} onResumeDraft={handleResumeDraft} onDeleteDraft={handleDeleteDraft} />,
     submissions: <SubmissionsPage submissions={submissions} onRefresh={async () => {
       const result = await fetchSubmissionsApi();
