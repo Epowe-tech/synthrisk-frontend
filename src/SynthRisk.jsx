@@ -19,23 +19,6 @@ const C = {
 };
 
 // ── SEED DATA ─────────────────────────────────────────────────────
-const SEED_ACCOUNTS = [
-  { id: 1, name: "ABC Plumbing", owner: "Demetri", renewal: "Oct 1", industry: "Plumbing & HVAC", naics: "238220", score: 6.4 },
-  { id: 2, name: "Valley Cafe", owner: "Demetri", renewal: "Aug 15", industry: "Full-Service Restaurants", naics: "722511", score: 4.1 },
-  { id: 3, name: "Alpha Roofing", owner: "Demetri", renewal: "Dec 10", industry: "Roofing Contractors", naics: "238160", score: 8.2 },
-  { id: 4, name: "Apex Electric", owner: "Demetri", renewal: "Nov 3", industry: "Electrical Contractors", naics: "238210", score: 5.5 },
-  { id: 5, name: "Desert Cafe", owner: "Sarah", renewal: "Sep 20", industry: "Full-Service Restaurants", naics: "722511", score: 3.9 },
-  { id: 6, name: "Westside Gym", owner: "Demetri", renewal: "Oct 1", industry: "Fitness Centers", naics: "713940", score: 5.1 },
-];
-
-const SEED_PIPELINE = [
-  { id: 1, account: "ABC Plumbing", stage: "Marketing", score: 6.4, premium: "$8,200", next: "Follow up market", accountId: 1 },
-  { id: 2, account: "Alpha Roofing", stage: "Marketing", score: 8.2, premium: "$14,500", next: "Send to MGA", accountId: 3 },
-  { id: 3, account: "Apex Electric", stage: "Quotes", score: 5.5, premium: "$6,800", next: "Review quotes", accountId: 4 },
-  { id: 4, account: "Desert Cafe", stage: "Proposal", score: 3.9, premium: "$4,100", next: "Send proposal", accountId: 5 },
-  { id: 5, account: "Westside Gym", stage: "Bound", score: 5.1, premium: "$5,900", next: "Issue policy", accountId: 6 },
-];
-
 const MARKETS_LIST = [
   { name: "Travelers", type: "Carrier", fit: "Strong", classes: ["Contractors", "Plumbing", "Restaurants", "Retail"], states: ["AZ", "CA", "TX"] },
   { name: "Liberty Mutual", type: "Carrier", fit: "Strong", classes: ["Contractors", "Manufacturing", "Electrical"], states: ["AZ", "NV", "CO"] },
@@ -1359,7 +1342,7 @@ function Sidebar({ page, setPage, setContext, draftCount, user, onLogout }) {
       <nav style={{ flex: 1, padding: "10px 8px" }}>
         {NAV.map(item => {
           const active = page === item.id || (item.id === "pipeline" && page === "submission-workspace") || (item.id === "accounts" && page === "account-workspace");
-          const badge = item.id === "pipeline" ? (SEED_PIPELINE.length + draftCount) : null;
+          const badge = item.id === "pipeline" ? draftCount : null;
           return (
             <button key={item.id} onClick={() => {
                 if (item.id === "new-submission") setContext({});
@@ -1389,19 +1372,42 @@ function Sidebar({ page, setPage, setContext, draftCount, user, onLogout }) {
 }
 
 // ── HOME ──────────────────────────────────────────────────────────
-function HomePage({ setPage, setContext, drafts, user }) {
-  const opps = SEED_ACCOUNTS.filter(a => a.score > 5.5);
-  const active = SEED_PIPELINE.filter(p => ["Marketing", "Quotes"].includes(p.stage));
-  const renewals = SEED_ACCOUNTS.filter(a => a.renewal.includes("Oct") || a.renewal.includes("Nov"));
+// ── HOME ──────────────────────────────────────────────────────────
+function HomePage({ setPage, setContext, drafts, submissions, user }) {
   const displayName = user?.name || "Agent";
+
+  // Real-data stats. "Bound This Month" and "Upcoming Renewals" will become
+  // real when those features ship (stage tracking + renewal dates). For now: zero.
+  const activeSubmissions = submissions.filter(s =>
+    ["Marketing", "Quotes", "Proposal"].includes(s.stage || "Marketing")
+  );
+
+  const stats = [
+    { l: "Active Deals",      v: activeSubmissions.length, c: C.accent },
+    { l: "Saved Drafts",      v: drafts.length,            c: C.amber  },
+    { l: "Bound This Month",  v: 0,                        c: C.green  },
+    { l: "Upcoming Renewals", v: 0,                        c: C.red    },
+  ];
+
+  const EmptyState = ({ message }) => (
+    <div style={{ padding: "28px 12px", textAlign: "center", color: C.textDim, fontSize: 12 }}>
+      {message}
+    </div>
+  );
+
   return (
     <div>
       <div style={{ marginBottom: 22 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Good morning, {displayName} 👋</div>
-        <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>Here's your book at a glance · {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>
+          Good morning, {displayName} 👋
+        </div>
+        <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>
+          Here's your book at a glance · {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+        </div>
       </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 22 }}>
-        {[{ l: "Active Deals", v: SEED_PIPELINE.length, c: C.accent }, { l: "Saved Drafts", v: drafts.length, c: C.amber }, { l: "Bound This Month", v: 1, c: C.green }, { l: "Upcoming Renewals", v: renewals.length, c: C.red }].map(s => (
+        {stats.map(s => (
           <Card key={s.l}>
             <div style={{ fontSize: 30, fontWeight: 800, color: s.c, fontFamily: "monospace" }}>{s.v}</div>
             <div style={{ fontSize: 11, color: C.textMid, marginTop: 4 }}>{s.l}</div>
@@ -1409,7 +1415,7 @@ function HomePage({ setPage, setContext, drafts, user }) {
         ))}
       </div>
 
-      {/* Saved Drafts banner */}
+      {/* Saved Drafts banner — only when drafts exist */}
       {drafts.length > 0 && (
         <div style={{ background: C.amber + "11", border: `1px solid ${C.amber}33`, borderRadius: 8, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -1426,38 +1432,37 @@ function HomePage({ setPage, setContext, drafts, user }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
         <Card>
           <Sec>New Opportunities</Sec>
-          <DataTable headers={["Business", "Industry", "Score", ""]}
-            rows={opps.map(a => [
-              <b style={{ color: C.text }}>{a.name}</b>,
-              <span style={{ color: C.textMid, fontSize: 11 }}>{a.industry}</span>,
-              <ScorePill score={a.score} />,
-              <Btn small variant="success" onClick={() => { setContext({ submissionAccount: a }); setPage("new-submission"); }}>Start</Btn>
-            ])} />
+          <EmptyState message="Add accounts to surface new opportunities here." />
         </Card>
         <Card>
           <Sec>Active Deals</Sec>
-          <DataTable headers={["Business", "Stage", "Next Action"]}
-            rows={active.map(p => [
-              <button onClick={() => { setContext({ submission: p }); setPage("submission-workspace"); }} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>{p.account}</button>,
-              <Tag color={p.stage === "Quotes" ? C.green : C.amber}>{p.stage}</Tag>,
-              <span style={{ fontSize: 11, color: C.textMid }}>{p.next}</span>
-            ])} />
+          {activeSubmissions.length === 0 ? (
+            <EmptyState message="No active deals yet. Start a submission to get going." />
+          ) : (
+            <DataTable headers={["Business", "SR Number", "Stage"]}
+              rows={activeSubmissions.slice(0, 5).map(s => [
+                <b style={{ color: C.text }}>{s.businessName || "Untitled"}</b>,
+                <span style={{ fontFamily: "monospace", color: C.accent, fontSize: 12 }}>{s.srNumber || "—"}</span>,
+                <Tag color={C.amber}>{s.stage || "Marketing"}</Tag>,
+              ])} />
+          )}
         </Card>
       </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Card>
           <Sec>Upcoming Renewals</Sec>
-          <DataTable headers={["Business", "Renewal", ""]}
-            rows={renewals.map(a => [
-              <b style={{ color: C.text }}>{a.name}</b>,
-              <span style={{ color: C.amber, fontWeight: 600 }}>{a.renewal}</span>,
-              <Btn small onClick={() => { setContext({}); setPage("new-submission"); }}>Renew</Btn>
-            ])} />
+          <EmptyState message="Renewals will appear here as policies approach expiration." />
         </Card>
         <Card>
           <Sec>Quick Actions</Sec>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {[{ l: "+ New Submission", p: "new-submission", v: "primary" }, { l: "+ Add Account", p: "accounts", v: "ghost" }, { l: "Open Pipeline", p: "pipeline", v: "ghost" }, { l: "Market Finder", p: "markets", v: "ghost" }].map(a => (
+            {[
+              { l: "+ New Submission", p: "new-submission", v: "primary" },
+              { l: "+ Add Account",    p: "accounts",       v: "ghost"   },
+              { l: "Open Pipeline",    p: "pipeline",       v: "ghost"   },
+              { l: "Market Finder",    p: "markets",        v: "ghost"   },
+            ].map(a => (
               <Btn key={a.l} variant={a.v} full onClick={() => {
                 if (a.p === "new-submission") setContext({});
                 setPage(a.p);
@@ -2188,16 +2193,17 @@ function PipelinePage({ setPage, setContext, drafts, onResumeDraft, onDeleteDraf
   const STAGES = ["Draft", "Marketing", "Quotes", "Proposal", "Bound"];
   const stageCol = { Draft: C.textDim, Marketing: C.amber, Quotes: C.accent, Proposal: "#a78bfa", Bound: C.green };
 
-  // Merge real pipeline with drafts
+  // Real items only — drafts surface as "Draft" stage cards.
+  // Submissions in their tracked stages will join here when stage updates ship.
   const draftItems = drafts.map(d => ({ id: `draft-${d.id}`, account: d.businessName || "Untitled Draft", stage: "Draft", score: d.score || 0, premium: "—", next: `Saved ${d.savedAt || ""}`, isDraft: true, draftData: d }));
-  const allItems = [...draftItems, ...SEED_PIPELINE];
+  const allItems = draftItems;
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Pipeline</div>
-          <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>My Deals · {allItems.length} total ({drafts.length} draft{drafts.length !== 1 ? "s" : ""})</div>
+          <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>My Deals · {drafts.length} draft{drafts.length !== 1 ? "s" : ""}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {["kanban", "table"].map(v => <button key={v} onClick={() => setView(v)} style={{ padding: "7px 14px", borderRadius: 6, border: `1px solid ${C.border}`, background: view === v ? C.accentGlow : "transparent", color: view === v ? C.accent : C.textMid, fontSize: 11, fontFamily: "inherit", cursor: "pointer", fontWeight: view === v ? 700 : 400 }}>{v === "kanban" ? "⊞ Kanban" : "≡ Table"}</button>)}
@@ -2342,7 +2348,15 @@ function SubmissionsPage({ submissions, onRefresh }) {
 
 // ── SUBMISSION WORKSPACE ───────────────────────────────────────────
 function SubmissionWorkspacePage({ context, setPage, setContext }) {
-  const sub = context?.submission || SEED_PIPELINE[0];
+  const sub = context?.submission;
+  if (!sub) {
+    return (
+      <Card style={{ textAlign: "center", padding: "60px 20px" }}>
+        <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>No submission selected</div>
+        <div style={{ fontSize: 12, color: C.textMid }}>Open a submission from the Submissions page to view its workspace.</div>
+      </Card>
+    );
+  }
   const [tab, setTab] = useState("overview");
   const [showMarkets, setShowMarkets] = useState(false);
 
@@ -2435,31 +2449,32 @@ function SubmissionWorkspacePage({ context, setPage, setContext }) {
 }
 
 // ── ACCOUNTS ───────────────────────────────────────────────────────
-function AccountsPage({ setPage, setContext }) {
+// ── ACCOUNTS ───────────────────────────────────────────────────────
+function AccountsPage() {
   const [q, setQ] = useState("");
-  const filtered = SEED_ACCOUNTS.filter(a => a.name.toLowerCase().includes(q.toLowerCase()));
+  // No accounts backend yet — real Accounts will arrive in a future phase.
+  // For now this is an empty list; UI shape is kept ready for when data exists.
+  const accounts = [];
+  const filtered = accounts.filter(a => a.name.toLowerCase().includes(q.toLowerCase()));
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Accounts</div>
-          <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>{SEED_ACCOUNTS.length} accounts in your book</div>
+          <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>{accounts.length} accounts in your book</div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <input placeholder="Search..." value={q} onChange={e => setQ(e.target.value)} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: "8px 13px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none", width: 200 }} />
           <Btn variant="primary">+ Add Account</Btn>
         </div>
       </div>
-      <Card>
-        <DataTable headers={["Business", "Owner", "Industry", "Score", "Renewal", ""]}
-          rows={filtered.map(a => [
-            <button onClick={() => { setContext({ account: a }); setPage("account-workspace"); }} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>{a.name}</button>,
-            <span style={{ color: C.textMid }}>{a.owner}</span>,
-            <span style={{ fontSize: 11, color: C.textMid }}>{a.industry}</span>,
-            <ScorePill score={a.score} />,
-            <span style={{ color: C.amber, fontWeight: 600 }}>{a.renewal}</span>,
-            <Btn small onClick={() => { setContext({ submissionAccount: a }); setPage("new-submission"); }}>+ Sub</Btn>
-          ])} />
+
+      <Card style={{ textAlign: "center", padding: "60px 20px" }}>
+        <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>No accounts yet</div>
+        <div style={{ fontSize: 12, color: C.textMid, maxWidth: 360, margin: "0 auto" }}>
+          Add an account to start tracking renewals, submissions, and pipeline activity for that business.
+        </div>
       </Card>
     </div>
   );
@@ -2467,9 +2482,17 @@ function AccountsPage({ setPage, setContext }) {
 
 // ── ACCOUNT WORKSPACE ──────────────────────────────────────────────
 function AccountWorkspacePage({ context, setPage, setContext }) {
-  const acct = context?.account || SEED_ACCOUNTS[0];
+  const acct = context?.account;
+  if (!acct) {
+    return (
+      <Card style={{ textAlign: "center", padding: "60px 20px" }}>
+        <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>No account selected</div>
+        <div style={{ fontSize: 12, color: C.textMid }}>Open an account from the Accounts page to view its workspace.</div>
+      </Card>
+    );
+  }
   const [tab, setTab] = useState("summary");
-  const subs = SEED_PIPELINE.filter(p => p.accountId === acct.id);
+  const subs = [];
   return (
     <div>
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 20px", marginBottom: 18 }}>
@@ -2753,7 +2776,7 @@ const handleLogout = async () => {
   }, [page, context]);
 
   const pages = {
-    home: <HomePage setPage={nav} setContext={setContext} drafts={drafts} user={user} />,
+    home: <HomePage setPage={nav} setContext={setContext} drafts={drafts} submissions={submissions} user={user} />,
     "new-submission": <NewSubmissionPage context={context} onSaveDraft={handleSaveDraft} onRunMarkets={handleRunMarkets} />,
     pipeline: <PipelinePage setPage={nav} setContext={setContext} drafts={drafts} onResumeDraft={handleResumeDraft} onDeleteDraft={handleDeleteDraft} />,
     submissions: <SubmissionsPage submissions={submissions} onRefresh={async () => {
