@@ -1101,6 +1101,10 @@ async function saveSubmissionApi(submission) {
   return apiFetch("/submissions", { method: "POST", body: JSON.stringify(submission) });
 }
 
+async function scoreWithIsfApi(payload) {
+  return apiFetch("/isf/score", { method: "POST", body: JSON.stringify(payload) });
+}
+
 async function fetchSubmissionsApi() {
   return apiFetch("/submissions");
 }
@@ -2730,9 +2734,39 @@ const handleLogout = async () => {
       // Subsequent sends reuse the same submissionId so we don't duplicate.
       let submissionIdToUse = activeSubmissionId;
       if (!submissionIdToUse) {
+        // --- ISF: validate the score against S&P data before persisting ---
+        const VERTICAL_MAP = {
+          Construction: "Contractor",
+          Hospitality: "Restaurant",
+          Manufacturing: "Manufacturing",
+          "Real Estate": "Habitational",
+        };
+        const category = getNAICSEntry(form.naicsCode)?.category;
+        const vertical = VERTICAL_MAP[category];
+        const line = form.glLimit ? "GL" : (form.propertyLimit ? "Property" : "GL");
+
+        let synthScore = null;
+        let comparison = null;
+        try {
+          const isf = await scoreWithIsfApi({
+            vertical,
+            line,
+            state: form.state || undefined,
+            originalScore: score,
+          });
+          synthScore = isf.synth_score;
+          comparison = isf.comparison;
+        } catch (isfErr) {
+          // The ISF must never block a submission from saving. If it fails, we
+          // persist the submission without it and move on.
+          console.warn("ISF scoring failed — saving without it", isfErr);
+        }
+
         const result = await saveSubmissionApi({
           ...form,
           score,
+          synthScore,
+          comparison,
           riskBreakdown,
           draftId: form.id,
           stage: "Marketing",
