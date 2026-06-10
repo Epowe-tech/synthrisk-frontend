@@ -1335,8 +1335,14 @@ const NAV = [
 function Sidebar({ page, setPage, setContext, draftCount, user, onLogout }) {
   return (
     <div style={{ width: 210, minHeight: "100vh", background: C.surface, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, zIndex: 100 }}>
-      <div style={{ padding: "20px 16px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "center" }}>
-        <img src={synthLogo} alt="SynthRisk" style={{ height: 72, width: "auto", objectFit: "contain", display: "block" }} />
+      <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 7, background: `linear-gradient(135deg, ${C.accent}, ${C.green})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⬡</div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 2, color: C.text, fontFamily: "monospace" }}>SYNTHRISK</div>
+            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: 1 }}>AGENCY PLATFORM</div>
+          </div>
+        </div>
       </div>
       <nav style={{ flex: 1, padding: "10px 8px" }}>
         {NAV.map(item => {
