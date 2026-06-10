@@ -1814,7 +1814,7 @@ const IndustryQuestionsPanel = ({ naicsCode, answers, onChange }) => {
   );
 };
 // ── NEW SUBMISSION ─────────────────────────────────────────────────
-function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission }) {
+function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission, setPage }) {
   const prefill = context?.draft || null;
   const [step, setStep] = useState(1);
   const [score, setScore] = useState(prefill?.score || null);
@@ -1926,7 +1926,10 @@ function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission })
     setGenerating(true);
     try {
       const result = await onGenerateSubmission(form, s, buildRiskBreakdown());
-      if (result?.ok) setGenerated(true);
+      if (result?.ok) {
+        setGenerated(true);
+        setPage("submissions");
+      }
     } finally {
       setGenerating(false);
     }
@@ -2988,7 +2991,7 @@ const handleLogout = async () => {
 
   const pages = {
     home: <HomePage setPage={nav} setContext={setContext} drafts={drafts} submissions={submissions} user={user} />,
-    "new-submission": <NewSubmissionPage context={context} user={user} onSaveDraft={handleSaveDraft} onGenerateSubmission={handleGenerateSubmission} />,
+    "new-submission": <NewSubmissionPage context={context} user={user} onSaveDraft={handleSaveDraft} onGenerateSubmission={handleGenerateSubmission} setPage={nav} />,
     pipeline: <PipelinePage setPage={nav} setContext={setContext} drafts={drafts} onResumeDraft={handleResumeDraft} onDeleteDraft={handleDeleteDraft} />,
     submissions: <SubmissionsPage submissions={submissions} onRefresh={async () => {
       const result = await fetchSubmissionsApi();
