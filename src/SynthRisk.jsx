@@ -1335,14 +1335,8 @@ const NAV = [
 function Sidebar({ page, setPage, setContext, draftCount, user, onLogout }) {
   return (
     <div style={{ width: 210, minHeight: "100vh", background: C.surface, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, zIndex: 100 }}>
-      <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 7, background: `linear-gradient(135deg, ${C.accent}, ${C.green})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⬡</div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 2, color: C.text, fontFamily: "monospace" }}>SYNTHRISK</div>
-            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: 1 }}>AGENCY PLATFORM</div>
-          </div>
-        </div>
+      <div style={{ padding: "20px 16px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "center" }}>
+        <img src={synthLogo} alt="SynthRisk" style={{ height: 72, width: "auto", objectFit: "contain", display: "block" }} />
       </div>
       <nav style={{ flex: 1, padding: "10px 8px" }}>
         {NAV.map(item => {
@@ -2970,13 +2964,8 @@ const handleLogout = async () => {
         @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
       <Sidebar page={page} setPage={nav} setContext={setContext} draftCount={drafts.length} user={user} onLogout={handleLogout} />
-      <main style={{ marginLeft: 210, minHeight: "100vh", width: "calc(100vw - 210px)" }}>
-        <div style={{ position: "sticky", top: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "flex-end", height: 60, padding: "0 32px", background: C.bg, borderBottom: `1px solid ${C.border}` }}>
-          <img src={synthLogo} alt="Synth" style={{ height: 40, width: "auto", objectFit: "contain", display: "block" }} />
-        </div>
-        <div style={{ padding: "28px 32px" }}>
-          {pages[page] || pages["home"]}
-        </div>
+      <main style={{ marginLeft: 210, padding: "28px 32px", minHeight: "100vh", width: "calc(100vw - 210px)" }}>
+        {pages[page] || pages["home"]}
       </main>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
