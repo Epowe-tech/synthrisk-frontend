@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getCurrentUser, fetchUserAttributes, signOut, fetchAuthSession } from "aws-amplify/auth";
 import LoginPage from "./LoginPage.jsx";
+import synthLogo from "./assets/Synthlogo.png";
 
 const C = {
   bg: "#08090d",
@@ -2264,8 +2265,125 @@ function PipelinePage({ setPage, setContext, drafts, onResumeDraft, onDeleteDraf
   );
 }
 
+// ── SUBMISSION DETAIL (read-only final review) ─────────────────────
+function SubmissionDetailPage({ context, setPage }) {
+  const s = context?.submission;
+  if (!s) {
+    return (
+      <Card style={{ textAlign: "center", padding: "60px 20px" }}>
+        <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>No submission selected</div>
+        <div style={{ fontSize: 12, color: C.textMid, marginBottom: 16 }}>Open a submission from the Submissions page.</div>
+        <Btn variant="ghost" onClick={() => setPage("submissions")}>← Back to Submissions</Btn>
+      </Card>
+    );
+  }
+
+  const score = s.score !== undefined && s.score !== null ? parseFloat(s.score) : null;
+  const synth = s.synthScore !== undefined && s.synthScore !== null ? parseFloat(s.synthScore) : null;
+  const comparison = s.comparison || null;
+  const industry = getNAICSEntry(s.naicsCode)?.industry || "—";
+  const breakdown = s.riskBreakdown || null;
+  const validScore = score !== null && !isNaN(score);
+  const validSynth = synth !== null && !isNaN(synth);
+
+  const summaryFields = [
+    ["Business", s.businessName || "—"],
+    ["Producer", s.producer || "—"],
+    ["Industry", industry],
+    ["GL Limit", s.glLimit || "—"],
+    ["Employees", s.employees || "—"],
+    ["Effective Date", s.effectiveDate || "—"],
+    ["Address", s.address || "—"],
+    ["Stage", s.stage || "Marketing"],
+  ];
+
+  return (
+    <div>
+      <button onClick={() => setPage("submissions")} style={{ background: "none", border: "none", color: C.textMid, cursor: "pointer", fontSize: 12, fontFamily: "inherit", marginBottom: 16, padding: 0 }}>← Back to Submissions</button>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
+        <div>
+          <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1.5, marginBottom: 5 }}>SUBMISSION</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{s.businessName || "Untitled"}</div>
+          <div style={{ display: "flex", gap: 10, marginTop: 9, alignItems: "center" }}>
+            <span style={{ fontFamily: "monospace", fontWeight: 700, color: C.accent, fontSize: 13 }}>{s.srNumber || "—"}</span>
+            <Tag color={C.amber}>{s.stage || "Marketing"}</Tag>
+            {validScore && <ScorePill score={score} />}
+            {s.createdAt && <span style={{ fontSize: 11, color: C.textDim }}>{new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>}
+          </div>
+        </div>
+        {s.pdfUrl && (
+          <a href={s.pdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.green, fontSize: 13, fontWeight: 600, textDecoration: "none", border: `1px solid ${C.green}44`, borderRadius: 6, padding: "8px 16px" }}>Download PDF ↓</a>
+        )}
+      </div>
+
+      <Card style={{ marginBottom: 16 }}>
+        <Sec>Submission Summary</Sec>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {summaryFields.map(([k, v]) => (
+            <div key={k} style={{ background: C.bg, padding: "9px 12px", borderRadius: 6 }}>
+              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 3 }}>{k.toUpperCase()}</div>
+              <div style={{ fontSize: 13, color: C.text }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {validSynth && (
+        <Card style={{ marginBottom: 16 }}>
+          <Sec>Synth Score Validation</Sec>
+          <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 4 }}>ORIGINAL SCORE</div>
+              <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "monospace", color: validScore ? scoreColor(score) : C.text }}>{validScore ? score.toFixed(1) : "—"}</div>
+            </div>
+            <div style={{ fontSize: 20, color: C.textDim }}>→</div>
+            <div>
+              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 4 }}>SYNTH SCORE</div>
+              <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "monospace", color: scoreColor(synth) }}>{synth.toFixed(1)}</div>
+            </div>
+            {comparison?.summary && (
+              <div style={{ flex: 1, minWidth: 220, borderLeft: `1px solid ${C.border}`, paddingLeft: 24 }}>
+                <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 4 }}>ASSESSMENT</div>
+                <div style={{ fontSize: 13, color: C.text }}>{comparison.summary}</div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {breakdown?.sections?.length > 0 && (
+        <Card style={{ marginBottom: 16 }}>
+          <Sec>Risk Factor Breakdown</Sec>
+          {breakdown.sections.map((section, si) => (
+            <div key={si} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textMid, marginBottom: 8 }}>{section.title}</div>
+              {section.items.map((it, ii) => (
+                <div key={ii} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: it.impact > 0 ? (it.impact >= 0.7 ? C.red : C.amber) : C.green, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: C.text }}>{it.question}</span>
+                  <span style={{ fontSize: 11, color: C.textDim, marginLeft: 8 }}>{it.answer}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: it.impact > 0 ? C.amber : C.green }}>{it.impact > 0 ? `+${it.impact.toFixed(1)}` : it.impact.toFixed(1)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {validScore && (
+        <div style={{ textAlign: "center", padding: "24px", background: C.surface, border: `1px solid ${scoreColor(score)}33`, borderRadius: 10 }}>
+          <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 2, marginBottom: 8 }}>CALCULATED RISK SCORE</div>
+          <div style={{ fontSize: 56, fontWeight: 900, color: scoreColor(score), fontFamily: "monospace", lineHeight: 1 }}>{score.toFixed(1)}</div>
+          <div style={{ fontSize: 11, color: scoreColor(score), marginTop: 6, letterSpacing: 2 }}>{score <= 3.5 ? "LOW RISK" : score <= 6.5 ? "MODERATE RISK" : "HIGH RISK"}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── SUBMISSIONS LIST ───────────────────────────────────────────────
-function SubmissionsPage({ submissions, onRefresh }) {
+function SubmissionsPage({ submissions, onRefresh, onOpenSubmission }) {
   const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -2327,7 +2445,7 @@ function SubmissionsPage({ submissions, onRefresh }) {
           <DataTable
             headers={["SR Number", "Business", "Stage", "Score", "Created", "PDF"]}
             rows={sorted.map(s => [
-              <span style={{ fontFamily: "monospace", fontWeight: 700, color: C.accent }}>{s.srNumber || "—"}</span>,
+              <button onClick={() => onOpenSubmission(s)} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontFamily: "monospace", fontWeight: 700, fontSize: 13, padding: 0, textDecoration: "underline" }}>{s.srNumber || "—"}</button>,
               <b style={{ color: C.text }}>{s.businessName || "Untitled"}</b>,
               <Tag color={C.amber}>{s.stage || "Marketing"}</Tag>,
               s.score ? <ScorePill score={parseFloat(s.score)} /> : <span style={{ color: C.textDim }}>—</span>,
@@ -2816,8 +2934,9 @@ const handleLogout = async () => {
     submissions: <SubmissionsPage submissions={submissions} onRefresh={async () => {
       const result = await fetchSubmissionsApi();
       setSubmissions(Array.isArray(result) ? result : []);
-    }} />,
+    }} onOpenSubmission={(s) => { setContext({ submission: s }); nav("submission-detail"); }} />,
     "submission-workspace": <SubmissionWorkspacePage context={context} setPage={nav} setContext={setContext} />,
+    "submission-detail": <SubmissionDetailPage context={context} setPage={nav} />,
     accounts: <AccountsPage setPage={nav} setContext={setContext} />,
     "account-workspace": <AccountWorkspacePage context={context} setPage={nav} setContext={setContext} />,
     markets: <MarketsPage />,
@@ -2851,8 +2970,13 @@ const handleLogout = async () => {
         @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
       <Sidebar page={page} setPage={nav} setContext={setContext} draftCount={drafts.length} user={user} onLogout={handleLogout} />
-      <main style={{ marginLeft: 210, padding: "28px 32px", minHeight: "100vh", width: "calc(100vw - 210px)" }}>
-        {pages[page] || pages["home"]}
+      <main style={{ marginLeft: 210, minHeight: "100vh", width: "calc(100vw - 210px)" }}>
+        <div style={{ position: "sticky", top: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "flex-end", height: 60, padding: "0 32px", background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+          <img src={synthLogo} alt="Synth" style={{ height: 40, width: "auto", objectFit: "contain", display: "block" }} />
+        </div>
+        <div style={{ padding: "28px 32px" }}>
+          {pages[page] || pages["home"]}
+        </div>
       </main>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
