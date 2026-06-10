@@ -1818,8 +1818,6 @@ function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission, s
   const prefill = context?.draft || null;
   const [step, setStep] = useState(1);
   const [score, setScore] = useState(prefill?.score || null);
-  const [generating, setGenerating] = useState(false);
-  const [generated, setGenerated] = useState(false);
   const [industryAnswers, setIndustryAnswers] = useState(prefill?.industryAnswers || {});
   const [categoryExposure, setCategoryExposure] = useState(prefill?.categoryExposure || {});
 
@@ -1917,22 +1915,17 @@ function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission, s
     return () => clearTimeout(autosaveTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, industryAnswers, categoryExposure, step, score]);
-  const handleGenerate = async () => {
+  const handleGenerate = () => {
     let s = score;
     if (!s && form.naicsCode) {
       s = computeScore(form.naicsCode, +form.employees, +form.recordable, +form.dart, industryAnswers);
       setScore(s);
     }
-    setGenerating(true);
-    try {
-      const result = await onGenerateSubmission(form, s, buildRiskBreakdown());
-      if (result?.ok) {
-        setGenerated(true);
-        setPage("submissions");
-      }
-    } finally {
-      setGenerating(false);
-    }
+    // Fire the save + ISF + PDF generation in the background — don't wait.
+    onGenerateSubmission(form, s, buildRiskBreakdown());
+    // Navigate immediately; the new row appears on Submissions once the
+    // save and refetch land a moment later.
+    setPage("submissions");
   };
 
   // Built fresh at send time from the same inputs the score uses, so the
@@ -2188,8 +2181,8 @@ function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission, s
                   <span title="Market sending is coming soon" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 6, border: `1px dashed ${C.border}`, color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "not-allowed", whiteSpace: "nowrap" }}>
                     ⬡ Run Markets <span style={{ fontSize: 9, letterSpacing: 1, background: C.border, color: C.textMid, padding: "1px 6px", borderRadius: 8 }}>SOON</span>
                   </span>
-                  <Btn variant="success" onClick={handleGenerate} disabled={generating || generated}>
-                    {generating ? "Generating…" : generated ? "✓ PDF Generating" : "📄 Generate PDF"}
+                  <Btn variant="success" onClick={handleGenerate}>
+                    📄 Generate PDF
                   </Btn>
                 </div>
             }
