@@ -1814,11 +1814,12 @@ const IndustryQuestionsPanel = ({ naicsCode, answers, onChange }) => {
   );
 };
 // ── NEW SUBMISSION ─────────────────────────────────────────────────
-function NewSubmissionPage({ context, user, onSaveDraft, onRunMarkets }) {
+function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission }) {
   const prefill = context?.draft || null;
   const [step, setStep] = useState(1);
   const [score, setScore] = useState(prefill?.score || null);
-  const [showMarkets, setShowMarkets] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generated, setGenerated] = useState(false);
   const [industryAnswers, setIndustryAnswers] = useState(prefill?.industryAnswers || {});
   const [categoryExposure, setCategoryExposure] = useState(prefill?.categoryExposure || {});
 
@@ -1916,12 +1917,19 @@ function NewSubmissionPage({ context, user, onSaveDraft, onRunMarkets }) {
     return () => clearTimeout(autosaveTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, industryAnswers, categoryExposure, step, score]);
-  const handleRunMarkets = () => {
-    if (!score && form.naicsCode) {
-      const s = computeScore(form.naicsCode, +form.employees, +form.recordable, +form.dart, industryAnswers);
+  const handleGenerate = async () => {
+    let s = score;
+    if (!s && form.naicsCode) {
+      s = computeScore(form.naicsCode, +form.employees, +form.recordable, +form.dart, industryAnswers);
       setScore(s);
     }
-    setShowMarkets(true);
+    setGenerating(true);
+    try {
+      const result = await onGenerateSubmission(form, s, buildRiskBreakdown());
+      if (result?.ok) setGenerated(true);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   // Built fresh at send time from the same inputs the score uses, so the
@@ -2173,21 +2181,19 @@ function NewSubmissionPage({ context, user, onSaveDraft, onRunMarkets }) {
             <Btn variant="ghost" onClick={handleSaveDraft}>💾 Save Draft</Btn>
             {step < 5
               ? <Btn variant="primary" onClick={handleNext}>Next →</Btn>
-              : <Btn variant="success" onClick={handleRunMarkets}>⬡ Run Markets</Btn>
+              : <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span title="Market sending is coming soon" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 6, border: `1px dashed ${C.border}`, color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "not-allowed", whiteSpace: "nowrap" }}>
+                    ⬡ Run Markets <span style={{ fontSize: 9, letterSpacing: 1, background: C.border, color: C.textMid, padding: "1px 6px", borderRadius: 8 }}>SOON</span>
+                  </span>
+                  <Btn variant="success" onClick={handleGenerate} disabled={generating || generated}>
+                    {generating ? "Generating…" : generated ? "✓ PDF Generating" : "📄 Generate PDF"}
+                  </Btn>
+                </div>
             }
           </div>
         </div>
       </Card>
 
-      {/* Run Markets Modal */}
-      {showMarkets && (
-        <RunMarketsModal
-          form={form}
-          score={score}
-          onClose={() => setShowMarkets(false)}
-          onSent={(marketName) => onRunMarkets && onRunMarkets(marketName, form, score, buildRiskBreakdown())}
-        />
-      )}
     </div>
   );
 }
@@ -2921,6 +2927,59 @@ const handleLogout = async () => {
     }
   };
 
+  const handleGenerateSubmission = async (form, score, riskBreakdown = null) => {
+    try {
+      const VERTICAL_MAP = {
+        Construction: "Contractor",
+        Hospitality: "Restaurant",
+        Manufacturing: "Manufacturing",
+        "Real Estate": "Habitational",
+      };
+      const category = getNAICSEntry(form.naicsCode)?.category;
+      const vertical = VERTICAL_MAP[category];
+      const line = form.glLimit ? "GL" : (form.propLimit ? "Property" : "GL");
+
+      let synthScore = null;
+      let comparison = null;
+      try {
+        const isf = await scoreWithIsfApi({
+          vertical,
+          line,
+          state: form.state || undefined,
+          originalScore: score,
+        });
+        synthScore = isf.synth_score;
+        comparison = isf.comparison;
+      } catch (isfErr) {
+        console.warn("ISF scoring failed — saving without it", isfErr);
+      }
+
+      const result = await saveSubmissionApi({
+        ...form,
+        score,
+        synthScore,
+        comparison,
+        riskBreakdown,
+        draftId: form.id,
+        stage: "Marketing",
+      });
+
+      try {
+        const savedSubmissions = await fetchSubmissionsApi();
+        setSubmissions(Array.isArray(savedSubmissions) ? savedSubmissions : []);
+      } catch (refetchErr) {
+        console.warn("Submission refetch failed", refetchErr);
+      }
+
+      showToast("Submission saved — generating PDF…", "success");
+      return { ok: true, submissionId: result?.submissionId };
+    } catch (err) {
+      console.error("Generate submission failed", err);
+      showToast(`Couldn't save submission: ${err.message}`, "red");
+      return { ok: false };
+    }
+  };
+
   useEffect(() => {
     if (page === "new-submission") {
       setActiveSubmissionId(null);
@@ -2929,7 +2988,7 @@ const handleLogout = async () => {
 
   const pages = {
     home: <HomePage setPage={nav} setContext={setContext} drafts={drafts} submissions={submissions} user={user} />,
-    "new-submission": <NewSubmissionPage context={context} user={user} onSaveDraft={handleSaveDraft} onRunMarkets={handleRunMarkets} />,
+    "new-submission": <NewSubmissionPage context={context} user={user} onSaveDraft={handleSaveDraft} onGenerateSubmission={handleGenerateSubmission} />,
     pipeline: <PipelinePage setPage={nav} setContext={setContext} drafts={drafts} onResumeDraft={handleResumeDraft} onDeleteDraft={handleDeleteDraft} />,
     submissions: <SubmissionsPage submissions={submissions} onRefresh={async () => {
       const result = await fetchSubmissionsApi();
