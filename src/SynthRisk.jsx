@@ -1,34 +1,30 @@
 import { useState, useEffect, useRef } from "react";
 import { getCurrentUser, fetchUserAttributes, signOut, fetchAuthSession } from "aws-amplify/auth";
 import LoginPage from "./LoginPage.jsx";
-import synthLogo from "./assets/Synthlogo.png";
+import Shell from "./synth/Shell.jsx";
+import Dashboard from "./synth/Dashboard.jsx";
+import Pipeline from "./synth/Pipeline.jsx";
+import Renewals from "./synth/Renewals.jsx";
+import SubmissionDetail from "./synth/SubmissionDetail.jsx";
+import { US_STATES, resaveBody, subId } from "./synth/model.js";
 
+// SYNTH brand palette (same values as the CSS tokens in index.css), used
+// by the intake wizard's inline styles.
 const C = {
-  bg: "#08090d",
-  surface: "#0e1118",
-  surfaceHigh: "#141720",
-  border: "#1c2030",
-  borderHigh: "#262d3f",
-  text: "#e8eaf0",
-  textMid: "#7a8299",
-  textDim: "#3a4055",
-  accent: "#3d8ef8",
-  accentGlow: "rgba(61,142,248,0.12)",
-  green: "#22c98a",
-  amber: "#f5a623",
-  red: "#ff5555",
+  bg: "#04060a",
+  surface: "#0b0f16",
+  surfaceHigh: "#121826",
+  border: "#1d2534",
+  borderHigh: "#2a3446",
+  text: "#eef1f6",
+  textMid: "#8b95a8",
+  textDim: "#5a6478",
+  accent: "#3d8bfd",
+  accentGlow: "rgba(61,139,253,0.12)",
+  green: "#2ec98e",
+  amber: "#f5b942",
+  red: "#ff5c5c",
 };
-
-// ── SEED DATA ─────────────────────────────────────────────────────
-const MARKETS_LIST = [
-  { name: "Travelers", type: "Carrier", fit: "Strong", classes: ["Contractors", "Plumbing", "Restaurants", "Retail"], states: ["AZ", "CA", "TX"] },
-  { name: "Liberty Mutual", type: "Carrier", fit: "Strong", classes: ["Contractors", "Manufacturing", "Electrical"], states: ["AZ", "NV", "CO"] },
-  { name: "AmTrust MGA", type: "MGA", fit: "Moderate", classes: ["Restaurants", "Retail", "Fitness"], states: ["AZ", "CA"] },
-  { name: "Markel Specialty", type: "MGA", fit: "Strong", classes: ["Roofing", "Excavation", "Site Preparation"], states: ["All"] },
-  { name: "Berkley One", type: "Carrier", fit: "Moderate", classes: ["Healthcare", "Gyms", "Fitness"], states: ["CA", "TX"] },
-  { name: "Employers Holdings", type: "Carrier", fit: "Strong", classes: ["Restaurants", "Retail", "Plumbing"], states: ["AZ", "NV", "TX"] },
-  { name: "Kinsale Capital", type: "MGA", fit: "Strong", classes: ["Contractors", "Roofing", "Electrical"], states: ["All"] },
-];
 
 const NAICS_DATA = [
   { naics: "236115", industry: "New Single-Family Housing Construction (except For-Sale Builders)", category: "Construction", national_trc: 3.6, national_dart: 1.9 },
@@ -1037,21 +1033,6 @@ function computeScore(naicsCode, employees, rec, dart, industryAnswers = {}) {
   return detailed ? detailed.finalScore : null;
 }
 
-function matchMarkets(form) {
-  const entry = form.naicsCode ? getNAICSEntry(form.naicsCode) : null;
-  const industryName = entry ? entry.industry.toLowerCase() : "";
-  return MARKETS_LIST.map(m => {
-    const classMatch = industryName === "" || m.classes.some(c => industryName.includes(c.toLowerCase()) || c.toLowerCase().includes(industryName.split(" ")[0].toLowerCase()));
-    return { ...m, matched: classMatch };
-  }).sort((a, b) => {
-    if (a.matched && !b.matched) return -1;
-    if (!a.matched && b.matched) return 1;
-    if (a.fit === "Strong" && b.fit !== "Strong") return -1;
-    if (a.fit !== "Strong" && b.fit === "Strong") return 1;
-    return 0;
-  });
-}
-
 function scoreColor(s) { return s <= 3.5 ? C.green : s <= 6.5 ? C.amber : C.red; }
 function scoreBadge(s) { return s <= 3.5 ? "LOW" : s <= 6.5 ? "MOD" : "HIGH"; }
 
@@ -1110,10 +1091,6 @@ async function fetchSubmissionsApi() {
   return apiFetch("/submissions");
 }
 
-async function sendMarketApi(marketName, form, score) {
-  return apiFetch("/markets/send", { method: "POST", body: JSON.stringify({ marketName, form, score }) });
-}
-
 // ── SHARED UI ─────────────────────────────────────────────────────
 const Tag = ({ children, color = C.accent }) => (
   <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, background: color + "22", color, border: `1px solid ${color}44` }}>{children}</span>
@@ -1162,320 +1139,6 @@ function DataTable({ headers, rows }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function TabBar({ tabs, active, setActive }) {
-  return (
-    <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
-      {tabs.map(t => (
-        <button key={t} onClick={() => setActive(t.toLowerCase())}
-          style={{ padding: "9px 16px", border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: active === t.toLowerCase() ? 700 : 400, color: active === t.toLowerCase() ? C.accent : C.textMid, borderBottom: active === t.toLowerCase() ? `2px solid ${C.accent}` : "2px solid transparent", marginBottom: -1 }}>
-          {t}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ── TOAST ─────────────────────────────────────────────────────────
-function Toast({ message, type = "success", onClose }) {
-  const color = type === "success" ? C.green : type === "amber" ? C.amber : C.red;
-  return (
-    <div style={{ position: "fixed", bottom: 28, right: 28, zIndex: 1000, background: C.surface, border: `1px solid ${color}55`, borderRadius: 10, padding: "14px 18px", display: "flex", alignItems: "center", gap: 12, boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px ${color}22`, minWidth: 260, animation: "slideUp 0.25s ease" }}>
-      <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
-      <span style={{ fontSize: 13, color: C.text, flex: 1 }}>{message}</span>
-      <button onClick={onClose} style={{ background: "none", border: "none", color: C.textDim, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
-    </div>
-  );
-}
-
-// ── RUN MARKETS MODAL ─────────────────────────────────────────────
-function RunMarketsModal({ form, score, onClose, onSent }) {
-  const matched = matchMarkets(form);
-  const [sentMarkets, setSentMarkets] = useState({});
-  const [sending, setSending] = useState(null);
-
-  const handleSend = async (marketName) => {
-    setSending(marketName);
-    try {
-      // Parent owns the actual API calls (saveSubmission + sendMarket).
-      // Modal just tracks UI state.
-      const result = await onSent(marketName);
-      if (result?.ok) {
-        setSentMarkets(prev => ({
-          ...prev,
-          [marketName]: {
-            date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-            status: "Sent",
-          },
-        }));
-      }
-    } finally {
-      setSending(null);
-    }
-  };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, width: "100%", maxWidth: 680, maxHeight: "85vh", overflow: "auto", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }}>
-        {/* Header */}
-        <div style={{ padding: "20px 24px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>⬡ Run Markets</div>
-            <div style={{ fontSize: 12, color: C.textMid, marginTop: 4 }}>
-              {form.businessName || "Submission"} · {getNAICSEntry(form.naicsCode)?.industry || "Unknown industry"}
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            {score && <ScorePill score={score} />}
-            <button onClick={onClose} style={{ background: "none", border: "none", color: C.textDim, cursor: "pointer", fontSize: 22, lineHeight: 1 }}>×</button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: "20px 24px" }}>
-          {/* Score summary */}
-          {score && (
-            <div style={{ background: C.bg, border: `1px solid ${scoreColor(score)}33`, borderRadius: 8, padding: "12px 16px", marginBottom: 20, display: "flex", gap: 24 }}>
-              <div><div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 4 }}>RISK SCORE</div><div style={{ fontSize: 22, fontWeight: 900, color: scoreColor(score), fontFamily: "monospace" }}>{score.toFixed(1)}</div></div>
-              <div style={{ borderLeft: `1px solid ${C.border}`, paddingLeft: 24 }}>
-                <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 4 }}>INDUSTRY</div>
-                <div style={{ fontSize: 13, color: C.text }}>{getNAICSEntry(form.naicsCode)?.industry || "—"}</div>
-              </div>
-              <div style={{ borderLeft: `1px solid ${C.border}`, paddingLeft: 24 }}>
-                <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 4 }}>MARKETS MATCHED</div>
-                <div style={{ fontSize: 13, color: C.green, fontWeight: 700 }}>{matched.filter(m => m.matched).length} of {matched.length}</div>
-              </div>
-            </div>
-          )}
-
-          {/* Recommended */}
-          <Sec>Recommended Markets</Sec>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
-            {matched.filter(m => m.matched).map(m => (
-              <div key={m.name} style={{ display: "flex", alignItems: "center", gap: 14, background: C.bg, border: `1px solid ${m.fit === "Strong" ? C.green + "33" : C.amber + "22"}`, borderRadius: 8, padding: "12px 16px" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{m.name}</span>
-                    <Tag color={m.type === "Carrier" ? C.accent : C.amber}>{m.type}</Tag>
-                    <Tag color={m.fit === "Strong" ? C.green : C.amber}>{m.fit} Fit</Tag>
-                  </div>
-                  <div style={{ fontSize: 11, color: C.textMid }}>States: {m.states.join(", ")} · Classes: {m.classes.join(", ")}</div>
-                </div>
-                {sentMarkets[m.name] ? (
-                  <div style={{ textAlign: "right" }}>
-                    <Tag color={C.green}>✓ Sent {sentMarkets[m.name].date}</Tag>
-                  </div>
-                ) : (
-                  <Btn variant="success" small onClick={() => handleSend(m.name)} disabled={sending === m.name}>
-                    {sending === m.name ? "Sending..." : "Send ↗"}
-                  </Btn>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Other markets */}
-          {matched.filter(m => !m.matched).length > 0 && (
-            <>
-              <Sec>Other Available Markets</Sec>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {matched.filter(m => !m.matched).map(m => (
-                  <div key={m.name} style={{ display: "flex", alignItems: "center", gap: 14, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 16px", opacity: 0.7 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                        <span style={{ fontWeight: 600, fontSize: 13, color: C.textMid }}>{m.name}</span>
-                        <Tag color={m.type === "Carrier" ? C.accent : C.amber}>{m.type}</Tag>
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textDim }}>States: {m.states.join(", ")}</div>
-                    </div>
-                    {sentMarkets[m.name] ? (
-                      <Tag color={C.green}>✓ Sent</Tag>
-                    ) : (
-                      <Btn variant="ghost" small onClick={() => handleSend(m.name)} disabled={sending === m.name}>
-                        {sending === m.name ? "Sending..." : "Send anyway"}
-                      </Btn>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: "16px 24px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: C.textDim }}>
-            {Object.keys(sentMarkets).length > 0 ? `${Object.keys(sentMarkets).length} market${Object.keys(sentMarkets).length > 1 ? "s" : ""} notified` : "No markets sent yet"}
-          </span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn variant="ghost" onClick={onClose}>Close</Btn>
-            {Object.keys(sentMarkets).length > 0 && (
-              <Btn variant="primary" onClick={onClose}>View in Pipeline →</Btn>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── SIDEBAR ───────────────────────────────────────────────────────
-const NAV = [
-  { id: "home", icon: "⌂", label: "Home" },
-  { id: "new-submission", icon: "＋", label: "New Submission" },
-  { id: "pipeline", icon: "◫", label: "Pipeline" },
-  { id: "submissions", icon: "▤", label: "Submissions" },
-  { id: "accounts", icon: "◉", label: "Accounts" },
-  { id: "markets", icon: "◈", label: "Markets" },
-];
-
-function Sidebar({ page, setPage, setContext, draftCount, user, onLogout }) {
-  return (
-    <div style={{ width: 210, minHeight: "100vh", background: C.surface, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, zIndex: 100 }}>
-      <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 7, background: `linear-gradient(135deg, ${C.accent}, ${C.green})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⬡</div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 2, color: C.text, fontFamily: "monospace" }}>SYNTHRISK</div>
-            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: 1 }}>AGENCY PLATFORM</div>
-          </div>
-        </div>
-      </div>
-      <nav style={{ flex: 1, padding: "10px 8px" }}>
-        {NAV.map(item => {
-          const active = page === item.id || (item.id === "pipeline" && page === "submission-workspace") || (item.id === "accounts" && page === "account-workspace");
-          const badge = item.id === "pipeline" ? draftCount : null;
-          return (
-            <button key={item.id} onClick={() => {
-                if (item.id === "new-submission") setContext({});
-                setPage(item.id);
-              }}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 7, border: "none", cursor: "pointer", background: active ? C.accentGlow : "transparent", color: active ? C.accent : C.textMid, fontSize: 13, fontFamily: "inherit", fontWeight: active ? 700 : 400, marginBottom: 2, textAlign: "left" }}>
-              <span style={{ fontSize: 14, width: 18, textAlign: "center" }}>{item.icon}</span>
-              {item.label}
-              {badge !== null && <span style={{ marginLeft: "auto", fontSize: 10, background: C.accent + "2a", color: C.accent, borderRadius: 10, padding: "1px 6px", fontWeight: 700 }}>{badge}</span>}
-            </button>
-          );
-        })}
-      </nav>
-      <div style={{ padding: "14px", borderTop: `1px solid ${C.border}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <div style={{ width: 28, height: 28, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, ${C.green})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff" }}>{(user?.name || "A").charAt(0)}</div>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{user?.name || "Agent"}</div>
-            <div style={{ fontSize: 10, color: C.textDim }}>{user?.role || "Producer"}</div>
-          </div>
-          <div style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: "50%", background: C.green }} />
-        </div>
-        <button onClick={onLogout} style={{ width: "100%", marginTop: 12, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMid, fontSize: 11, fontFamily: "inherit", cursor: "pointer" }}>Sign out</button>
-      </div>
-    </div>
-  );
-}
-
-// ── HOME ──────────────────────────────────────────────────────────
-// ── HOME ──────────────────────────────────────────────────────────
-function HomePage({ setPage, setContext, drafts, submissions, user }) {
-  const displayName = user?.name || "Agent";
-
-  // Real-data stats. "Bound This Month" and "Upcoming Renewals" will become
-  // real when those features ship (stage tracking + renewal dates). For now: zero.
-  const activeSubmissions = submissions.filter(s =>
-    ["Marketing", "Quotes", "Proposal"].includes(s.stage || "Marketing")
-  );
-
-  const stats = [
-    { l: "Active Deals",      v: activeSubmissions.length, c: C.accent },
-    { l: "Saved Drafts",      v: drafts.length,            c: C.amber  },
-    { l: "Bound This Month",  v: 0,                        c: C.green  },
-    { l: "Upcoming Renewals", v: 0,                        c: C.red    },
-  ];
-
-  const EmptyState = ({ message }) => (
-    <div style={{ padding: "28px 12px", textAlign: "center", color: C.textDim, fontSize: 12 }}>
-      {message}
-    </div>
-  );
-
-  return (
-    <div>
-      <div style={{ marginBottom: 22 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>
-          Good morning, {displayName} 👋
-        </div>
-        <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>
-          Here's your book at a glance · {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-        </div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 22 }}>
-        {stats.map(s => (
-          <Card key={s.l}>
-            <div style={{ fontSize: 30, fontWeight: 800, color: s.c, fontFamily: "monospace" }}>{s.v}</div>
-            <div style={{ fontSize: 11, color: C.textMid, marginTop: 4 }}>{s.l}</div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Saved Drafts banner — only when drafts exist */}
-      {drafts.length > 0 && (
-        <div style={{ background: C.amber + "11", border: `1px solid ${C.amber}33`, borderRadius: 8, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <span style={{ fontSize: 14 }}>📋</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{drafts.length} saved draft{drafts.length > 1 ? "s" : ""}</div>
-              <div style={{ fontSize: 11, color: C.textMid }}>{drafts.map(d => d.businessName || "Untitled").join(", ")}</div>
-            </div>
-          </div>
-          <Btn small variant="amber" onClick={() => setPage("pipeline")}>View Drafts →</Btn>
-        </div>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <Card>
-          <Sec>New Opportunities</Sec>
-          <EmptyState message="Add accounts to surface new opportunities here." />
-        </Card>
-        <Card>
-          <Sec>Active Deals</Sec>
-          {activeSubmissions.length === 0 ? (
-            <EmptyState message="No active deals yet. Start a submission to get going." />
-          ) : (
-            <DataTable headers={["Business", "SR Number", "Stage"]}
-              rows={activeSubmissions.slice(0, 5).map(s => [
-                <b style={{ color: C.text }}>{s.businessName || "Untitled"}</b>,
-                <span style={{ fontFamily: "monospace", color: C.accent, fontSize: 12 }}>{s.srNumber || "—"}</span>,
-                <Tag color={C.amber}>{s.stage || "Marketing"}</Tag>,
-              ])} />
-          )}
-        </Card>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Card>
-          <Sec>Upcoming Renewals</Sec>
-          <EmptyState message="Renewals will appear here as policies approach expiration." />
-        </Card>
-        <Card>
-          <Sec>Quick Actions</Sec>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {[
-              { l: "+ New Submission", p: "new-submission", v: "primary" },
-              { l: "+ Add Account",    p: "accounts",       v: "ghost"   },
-              { l: "Open Pipeline",    p: "pipeline",       v: "ghost"   },
-              { l: "Market Finder",    p: "markets",        v: "ghost"   },
-            ].map(a => (
-              <Btn key={a.l} variant={a.v} full onClick={() => {
-                if (a.p === "new-submission") setContext({});
-                setPage(a.p);
-              }}>{a.l}</Btn>
-            ))}
-          </div>
-        </Card>
-      </div>
     </div>
   );
 }
@@ -1832,6 +1495,8 @@ function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission, s
     businessName: prefill?.businessName || context?.submissionAccount?.name || "",
     effectiveDate: prefill?.effectiveDate || "",
     address: prefill?.address || "",
+    state: prefill?.state || "",
+    line: prefill?.line || "",
     producer: prefill?.producer || user?.name || "",
     description: prefill?.description || "",
     naicsCode: prefill?.naicsCode || "",
@@ -1922,7 +1587,9 @@ function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission, s
       setScore(s);
     }
     // Fire the save + ISF + PDF generation in the background — don't wait.
-    onGenerateSubmission(form, s, buildRiskBreakdown());
+    // Pass the draft id so the backend deletes the draft once the
+    // submission exists (saveSubmission reads body.draftId).
+    onGenerateSubmission({ ...form, id: draftId || undefined }, s, buildRiskBreakdown());
     // Navigate immediately; the new row appears on Submissions once the
     // save and refetch land a moment later.
     setPage("submissions");
@@ -1979,7 +1646,17 @@ function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission, s
             <Field label="Business Name" k="businessName" ph="Enter business name" value={form.businessName} onChange={set} />
             <Field label="Effective Date" k="effectiveDate" type="date" value={form.effectiveDate} onChange={set} />
           </div>
-          <Field label="Address" k="address" ph="Street, City, State" value={form.address} onChange={set} />
+          <div style={{ display: "grid", gridTemplateColumns: "3fr 1fr", gap: 12 }}>
+            <Field label="Address" k="address" ph="Street, City" value={form.address} onChange={set} />
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>State</label>
+              <select value={form.state} onChange={e => set("state", e.target.value)}
+                style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.text, padding: "9px 12px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none" }}>
+                <option value="">Select…</option>
+                {US_STATES.map(st => <option key={st} value={st}>{st}</option>)}
+              </select>
+            </div>
+          </div>
           <Field label="Producer" k="producer" ph="Producer name" value={form.producer} onChange={set} />
         </>}
 
@@ -2194,196 +1871,6 @@ function NewSubmissionPage({ context, user, onSaveDraft, onGenerateSubmission, s
   );
 }
 
-// ── PIPELINE ───────────────────────────────────────────────────────
-function PipelinePage({ setPage, setContext, drafts, onResumeDraft, onDeleteDraft }) {
-  const [view, setView] = useState("kanban");
-  const STAGES = ["Draft", "Marketing", "Quotes", "Proposal", "Bound"];
-  const stageCol = { Draft: C.textDim, Marketing: C.amber, Quotes: C.accent, Proposal: "#a78bfa", Bound: C.green };
-
-  // Real items only — drafts surface as "Draft" stage cards.
-  // Submissions in their tracked stages will join here when stage updates ship.
-  const draftItems = drafts.map(d => ({ id: `draft-${d.id}`, account: d.businessName || "Untitled Draft", stage: "Draft", score: d.score || 0, premium: "—", next: `Saved ${d.savedAt || ""}`, isDraft: true, draftData: d }));
-  const allItems = draftItems;
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Pipeline</div>
-          <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>My Deals · {drafts.length} draft{drafts.length !== 1 ? "s" : ""}</div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {["kanban", "table"].map(v => <button key={v} onClick={() => setView(v)} style={{ padding: "7px 14px", borderRadius: 6, border: `1px solid ${C.border}`, background: view === v ? C.accentGlow : "transparent", color: view === v ? C.accent : C.textMid, fontSize: 11, fontFamily: "inherit", cursor: "pointer", fontWeight: view === v ? 700 : 400 }}>{v === "kanban" ? "⊞ Kanban" : "≡ Table"}</button>)}
-          <Btn variant="primary" onClick={() => { setContext({}); setPage("new-submission"); }}>+ New</Btn>
-        </div>
-      </div>
-
-      {view === "kanban" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-          {STAGES.map(stage => {
-            const items = allItems.filter(p => p.stage === stage);
-            return (
-              <div key={stage}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: stageCol[stage] }}>{stage.toUpperCase()}</span>
-                  <span style={{ fontSize: 10, background: C.border, borderRadius: 10, padding: "1px 7px", color: C.textMid }}>{items.length}</span>
-                </div>
-                {items.map(p => (
-                  <div key={p.id}
-                    style={{ background: C.surface, border: `1px solid ${p.isDraft ? C.amber + "44" : C.border}`, borderRadius: 8, padding: "12px 13px", cursor: "pointer", marginBottom: 8, transition: "border-color 0.15s" }}
-                    onClick={() => { if (p.isDraft) { onResumeDraft(p.draftData); setPage("new-submission"); } else { setContext({ submission: p }); setPage("submission-workspace"); } }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = p.isDraft ? C.amber : C.accent}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = p.isDraft ? C.amber + "44" : C.border}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: C.text, marginBottom: 7 }}>{p.account}</div>
-                      {p.isDraft && <button onClick={e => { e.stopPropagation(); onDeleteDraft(p.draftData.id); }} style={{ background: "none", border: "none", color: C.textDim, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }} title="Delete draft">×</button>}
-                    </div>
-                    {p.score > 0 && <ScorePill score={p.score} />}
-                    {p.isDraft && <div style={{ fontSize: 10, color: C.amber, marginTop: 6, fontWeight: 600 }}>DRAFT — click to resume</div>}
-                    {!p.isDraft && <><div style={{ fontSize: 11, color: C.textMid, marginTop: 7 }}>{p.premium}</div><div style={{ fontSize: 10, color: C.textDim, marginTop: 3 }}>{p.next}</div></>}
-                  </div>
-                ))}
-                {items.length === 0 && <div style={{ border: `1px dashed ${C.border}`, borderRadius: 8, padding: "20px", textAlign: "center", fontSize: 11, color: C.textDim }}>Empty</div>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {view === "table" && (
-        <Card>
-          <DataTable headers={["Account", "Stage", "Score", "Est. Premium", "Next Action", ""]}
-            rows={allItems.map(p => [
-              <button onClick={() => { if (p.isDraft) { onResumeDraft(p.draftData); setPage("new-submission"); } else { setContext({ submission: p }); setPage("submission-workspace"); } }} style={{ background: "none", border: "none", color: p.isDraft ? C.amber : C.accent, cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>{p.account}</button>,
-              <Tag color={stageCol[p.stage]}>{p.stage}</Tag>,
-              p.score > 0 ? <ScorePill score={p.score} /> : <span style={{ color: C.textDim }}>—</span>,
-              <span>{p.premium}</span>,
-              <span style={{ fontSize: 11, color: C.textMid }}>{p.next}</span>,
-              p.isDraft ? <Btn small danger onClick={() => onDeleteDraft(p.draftData.id)}>Delete</Btn> : null
-            ])} />
-        </Card>
-      )}
-    </div>
-  );
-}
-
-// ── SUBMISSION DETAIL (read-only final review) ─────────────────────
-function SubmissionDetailPage({ context, setPage }) {
-  const s = context?.submission;
-  if (!s) {
-    return (
-      <Card style={{ textAlign: "center", padding: "60px 20px" }}>
-        <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>No submission selected</div>
-        <div style={{ fontSize: 12, color: C.textMid, marginBottom: 16 }}>Open a submission from the Submissions page.</div>
-        <Btn variant="ghost" onClick={() => setPage("submissions")}>← Back to Submissions</Btn>
-      </Card>
-    );
-  }
-
-  const score = s.score !== undefined && s.score !== null ? parseFloat(s.score) : null;
-  const synth = s.synthScore !== undefined && s.synthScore !== null ? parseFloat(s.synthScore) : null;
-  const comparison = s.comparison || null;
-  const industry = getNAICSEntry(s.naicsCode)?.industry || "—";
-  const breakdown = s.riskBreakdown || null;
-  const validScore = score !== null && !isNaN(score);
-  const validSynth = synth !== null && !isNaN(synth);
-
-  const summaryFields = [
-    ["Business", s.businessName || "—"],
-    ["Producer", s.producer || "—"],
-    ["Industry", industry],
-    ["GL Limit", s.glLimit || "—"],
-    ["Employees", s.employees || "—"],
-    ["Effective Date", s.effectiveDate || "—"],
-    ["Address", s.address || "—"],
-    ["Stage", s.stage || "Marketing"],
-  ];
-
-  return (
-    <div>
-      <button onClick={() => setPage("submissions")} style={{ background: "none", border: "none", color: C.textMid, cursor: "pointer", fontSize: 12, fontFamily: "inherit", marginBottom: 16, padding: 0 }}>← Back to Submissions</button>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
-        <div>
-          <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1.5, marginBottom: 5 }}>SUBMISSION</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{s.businessName || "Untitled"}</div>
-          <div style={{ display: "flex", gap: 10, marginTop: 9, alignItems: "center" }}>
-            <span style={{ fontFamily: "monospace", fontWeight: 700, color: C.accent, fontSize: 13 }}>{s.srNumber || "—"}</span>
-            <Tag color={C.amber}>{s.stage || "Marketing"}</Tag>
-            {validScore && <ScorePill score={score} />}
-            {s.createdAt && <span style={{ fontSize: 11, color: C.textDim }}>{new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>}
-          </div>
-        </div>
-        {s.pdfUrl && (
-          <a href={s.pdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.green, fontSize: 13, fontWeight: 600, textDecoration: "none", border: `1px solid ${C.green}44`, borderRadius: 6, padding: "8px 16px" }}>Download PDF ↓</a>
-        )}
-      </div>
-
-      <Card style={{ marginBottom: 16 }}>
-        <Sec>Submission Summary</Sec>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {summaryFields.map(([k, v]) => (
-            <div key={k} style={{ background: C.bg, padding: "9px 12px", borderRadius: 6 }}>
-              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 3 }}>{k.toUpperCase()}</div>
-              <div style={{ fontSize: 13, color: C.text }}>{v}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {validSynth && (
-        <Card style={{ marginBottom: 16 }}>
-          <Sec>Synth Score Validation</Sec>
-          <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 4 }}>ORIGINAL SCORE</div>
-              <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "monospace", color: validScore ? scoreColor(score) : C.text }}>{validScore ? score.toFixed(1) : "—"}</div>
-            </div>
-            <div style={{ fontSize: 20, color: C.textDim }}>→</div>
-            <div>
-              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 4 }}>SYNTH SCORE</div>
-              <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "monospace", color: scoreColor(synth) }}>{synth.toFixed(1)}</div>
-            </div>
-            {comparison?.summary && (
-              <div style={{ flex: 1, minWidth: 220, borderLeft: `1px solid ${C.border}`, paddingLeft: 24 }}>
-                <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1, marginBottom: 4 }}>ASSESSMENT</div>
-                <div style={{ fontSize: 13, color: C.text }}>{comparison.summary}</div>
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {breakdown?.sections?.length > 0 && (
-        <Card style={{ marginBottom: 16 }}>
-          <Sec>Risk Factor Breakdown</Sec>
-          {breakdown.sections.map((section, si) => (
-            <div key={si} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.textMid, marginBottom: 8 }}>{section.title}</div>
-              {section.items.map((it, ii) => (
-                <div key={ii} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: it.impact > 0 ? (it.impact >= 0.7 ? C.red : C.amber) : C.green, flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: C.text }}>{it.question}</span>
-                  <span style={{ fontSize: 11, color: C.textDim, marginLeft: 8 }}>{it.answer}</span>
-                  <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: it.impact > 0 ? C.amber : C.green }}>{it.impact > 0 ? `+${it.impact.toFixed(1)}` : it.impact.toFixed(1)}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {validScore && (
-        <div style={{ textAlign: "center", padding: "24px", background: C.surface, border: `1px solid ${scoreColor(score)}33`, borderRadius: 10 }}>
-          <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 2, marginBottom: 8 }}>CALCULATED RISK SCORE</div>
-          <div style={{ fontSize: 56, fontWeight: 900, color: scoreColor(score), fontFamily: "monospace", lineHeight: 1 }}>{score.toFixed(1)}</div>
-          <div style={{ fontSize: 11, color: scoreColor(score), marginTop: 6, letterSpacing: 2 }}>{score <= 3.5 ? "LOW RISK" : score <= 6.5 ? "MODERATE RISK" : "HIGH RISK"}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── SUBMISSIONS LIST ───────────────────────────────────────────────
 function SubmissionsPage({ submissions, onRefresh, onOpenSubmission }) {
   const [search, setSearch] = useState("");
@@ -2470,505 +1957,171 @@ function SubmissionsPage({ submissions, onRefresh, onOpenSubmission }) {
   );
 }
 
-// ── SUBMISSION WORKSPACE ───────────────────────────────────────────
-function SubmissionWorkspacePage({ context, setPage, setContext }) {
-  const sub = context?.submission;
-  if (!sub) {
-    return (
-      <Card style={{ textAlign: "center", padding: "60px 20px" }}>
-        <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>No submission selected</div>
-        <div style={{ fontSize: 12, color: C.textMid }}>Open a submission from the Submissions page to view its workspace.</div>
-      </Card>
-    );
-  }
-  const [tab, setTab] = useState("overview");
-  const [showMarkets, setShowMarkets] = useState(false);
-
-  const mockForm = { businessName: sub.account, naicsCode: "", description: "", employees: "", hours: "", recordable: "", dart: "" };
-
-  return (
-    <div>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 20px", marginBottom: 18 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1.5, marginBottom: 5 }}>SUBMISSION</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{sub.account}</div>
-            <div style={{ display: "flex", gap: 10, marginTop: 9, alignItems: "center" }}>
-              <Tag color={C.amber}>{sub.stage}</Tag>
-              <ScorePill score={sub.score} />
-              <span style={{ fontSize: 12, color: C.textMid }}>Est. {sub.premium}</span>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn variant="ghost">💾 Save</Btn>
-            <Btn variant="primary" onClick={() => setShowMarkets(true)}>⬡ Run Markets</Btn>
-          </div>
-        </div>
-        <div style={{ marginTop: 12, padding: "9px 13px", background: C.bg, borderRadius: 6, fontSize: 12, color: C.textMid }}>
-          <span style={{ color: C.amber, fontWeight: 700 }}>Next: </span>{sub.next}
-        </div>
-      </div>
-      <TabBar tabs={["Overview", "Markets", "Quotes", "Tasks", "Docs", "Notes"]} active={tab} setActive={setTab} />
-      {tab === "overview" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <Card>
-            <Sec>Missing Information</Sec>
-            {["Loss runs needed", "Prior carrier confirmation"].map(x => (
-              <div key={x} style={{ display: "flex", gap: 9, alignItems: "center", marginBottom: 9 }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.red, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, color: C.text }}>{x}</span>
-              </div>
-            ))}
-          </Card>
-          <Card>
-            <Sec>Score Drivers</Sec>
-            {[{ l: "Industry class", n: "Strong market fit", c: C.green }, { l: "Territory", n: "Clean — low CAT exposure", c: C.green }, { l: "Loss history", n: "Pending — loss runs needed", c: C.amber }].map(d => (
-              <div key={d.l} style={{ display: "flex", gap: 9, alignItems: "flex-start", marginBottom: 10 }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: d.c, marginTop: 5, flexShrink: 0 }} />
-                <div><div style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{d.l}</div><div style={{ fontSize: 11, color: C.textMid }}>{d.n}</div></div>
-              </div>
-            ))}
-          </Card>
-          <Card style={{ gridColumn: "1 / -1" }}>
-            <Sec>Activity Log</Sec>
-            {[{ date: "Mar 4", note: "Submission created", user: "Demetri" }, { date: "Mar 5", note: "Sent to Travelers", user: "Demetri" }, { date: "Mar 6", note: "Awaiting loss runs from insured", user: "System" }].map((a, i) => (
-              <div key={i} style={{ display: "flex", gap: 14, marginBottom: 10, fontSize: 13 }}>
-                <span style={{ color: C.textDim, width: 38, flexShrink: 0 }}>{a.date}</span>
-                <span style={{ color: C.text }}>{a.note}</span>
-                <span style={{ color: C.textDim, marginLeft: "auto" }}>{a.user}</span>
-              </div>
-            ))}
-          </Card>
-        </div>
-      )}
-      {tab === "markets" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Card>
-            <Sec>Recommended Markets</Sec>
-            <DataTable headers={["Market", "Type", "Fit", ""]}
-              rows={[["Travelers", "Carrier", <Tag color={C.green}>Strong</Tag>, <Btn small variant="success">Send</Btn>], ["Markel Specialty", "MGA", <Tag color={C.green}>Strong</Tag>, <Btn small variant="success">Send</Btn>], ["AmTrust MGA", "MGA", <Tag color={C.amber}>Moderate</Tag>, <Btn small>Send</Btn>]]} />
-          </Card>
-          <Card>
-            <Sec>Active Markets</Sec>
-            <DataTable headers={["Market", "Sent Date", "Status"]} rows={[["Travelers", "Mar 1", <Tag color={C.amber}>Reviewing</Tag>]]} />
-          </Card>
-        </div>
-      )}
-      {tab === "quotes" && (
-        <Card>
-          <Sec>Quotes Received</Sec>
-          <DataTable headers={["Carrier", "Premium", "Deductible", "Status"]}
-            rows={[["Travelers", <span style={{ color: C.green, fontWeight: 700 }}>$7,800</span>, "$2,500", <Tag color={C.green}>Received</Tag>], ["Markel", <span style={{ color: C.textDim }}>Pending</span>, "—", <Tag color={C.amber}>Awaiting</Tag>]]} />
-        </Card>
-      )}
-      {["tasks", "docs", "notes"].includes(tab) && (
-        <Card style={{ textAlign: "center", padding: "40px" }}>
-          <div style={{ color: C.textDim, marginBottom: 14 }}>No {tab} yet.</div>
-          <Btn variant="ghost">+ Add {tab.slice(0, -1)}</Btn>
-        </Card>
-      )}
-      {showMarkets && <RunMarketsModal form={mockForm} score={sub.score} onClose={() => setShowMarkets(false)} onSent={() => {}} />}
-    </div>
-  );
-}
-
-// ── ACCOUNTS ───────────────────────────────────────────────────────
-// ── ACCOUNTS ───────────────────────────────────────────────────────
-function AccountsPage() {
-  const [q, setQ] = useState("");
-  // No accounts backend yet — real Accounts will arrive in a future phase.
-  // For now this is an empty list; UI shape is kept ready for when data exists.
-  const accounts = [];
-  const filtered = accounts.filter(a => a.name.toLowerCase().includes(q.toLowerCase()));
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Accounts</div>
-          <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>{accounts.length} accounts in your book</div>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <input placeholder="Search..." value={q} onChange={e => setQ(e.target.value)} style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: "8px 13px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none", width: 200 }} />
-          <Btn variant="primary">+ Add Account</Btn>
-        </div>
-      </div>
-
-      <Card style={{ textAlign: "center", padding: "60px 20px" }}>
-        <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>No accounts yet</div>
-        <div style={{ fontSize: 12, color: C.textMid, maxWidth: 360, margin: "0 auto" }}>
-          Add an account to start tracking renewals, submissions, and pipeline activity for that business.
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-// ── ACCOUNT WORKSPACE ──────────────────────────────────────────────
-function AccountWorkspacePage({ context, setPage, setContext }) {
-  const acct = context?.account;
-  if (!acct) {
-    return (
-      <Card style={{ textAlign: "center", padding: "60px 20px" }}>
-        <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>No account selected</div>
-        <div style={{ fontSize: 12, color: C.textMid }}>Open an account from the Accounts page to view its workspace.</div>
-      </Card>
-    );
-  }
-  const [tab, setTab] = useState("summary");
-  const subs = [];
-  return (
-    <div>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 20px", marginBottom: 18 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <div style={{ fontSize: 10, color: C.textDim, letterSpacing: 1.5, marginBottom: 5 }}>ACCOUNT</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{acct.name}</div>
-            <div style={{ display: "flex", gap: 12, marginTop: 9, alignItems: "center" }}>
-              <span style={{ fontSize: 12, color: C.textMid }}>Owner: {acct.owner}</span>
-              <span style={{ fontSize: 12, color: C.amber, fontWeight: 600 }}>Renewal: {acct.renewal}</span>
-              <ScorePill score={acct.score} />
-            </div>
-          </div>
-          <Btn variant="primary" onClick={() => { setContext({ submissionAccount: acct }); setPage("new-submission"); }}>+ New Submission</Btn>
-        </div>
-      </div>
-      <TabBar tabs={["Summary", "Submissions", "Tasks", "Docs", "Notes"]} active={tab} setActive={setTab} />
-      {tab === "summary" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <Card>
-            <Sec>Account Details</Sec>
-            {[["Industry", acct.industry], ["NAICS", acct.naics], ["Owner", acct.owner], ["Renewal Date", acct.renewal]].map(([k, v]) => (
-              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
-                <span style={{ color: C.textMid }}>{k}</span>
-                <span style={{ color: C.text, fontWeight: 500 }}>{v}</span>
-              </div>
-            ))}
-          </Card>
-          <Card style={{ textAlign: "center" }}>
-            <Sec>Risk Profile</Sec>
-            <div style={{ fontSize: 52, fontWeight: 900, color: scoreColor(acct.score), fontFamily: "monospace" }}>{acct.score.toFixed(1)}</div>
-            <div style={{ fontSize: 11, color: scoreColor(acct.score), letterSpacing: 2, marginTop: 4 }}>{acct.score <= 3.5 ? "LOW RISK" : acct.score <= 6.5 ? "MODERATE RISK" : "HIGH RISK"}</div>
-          </Card>
-        </div>
-      )}
-      {tab === "submissions" && (
-        <Card>
-          <Sec>Submission History</Sec>
-          {subs.length > 0 ? (
-            <DataTable headers={["Stage", "Score", "Premium", "Next"]}
-              rows={subs.map(p => [
-                <button onClick={() => { setContext({ submission: p }); setPage("submission-workspace"); }} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>{p.stage}</button>,
-                <ScorePill score={p.score} />, p.premium,
-                <span style={{ fontSize: 11, color: C.textMid }}>{p.next}</span>
-              ])} />
-          ) : <div style={{ textAlign: "center", padding: "30px", color: C.textDim }}>No submissions yet.</div>}
-        </Card>
-      )}
-      {["tasks", "docs", "notes"].includes(tab) && <Card style={{ textAlign: "center", padding: "40px", color: C.textDim }}>No {tab} yet.</Card>}
-    </div>
-  );
-}
-
-// ── MARKETS PAGE ───────────────────────────────────────────────────
-function MarketsPage() {
-  const [industry, setIndustry] = useState("");
-  const [fit, setFit] = useState("All");
-  const filtered = MARKETS_LIST.filter(m => (fit === "All" || m.fit === fit) && (industry === "" || m.classes.some(c => c.toLowerCase().includes(industry.toLowerCase()))));
-  return (
-    <div>
-      <div style={{ marginBottom: 22 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Market Finder</div>
-        <div style={{ fontSize: 13, color: C.textMid, marginTop: 3 }}>Find the right carrier or MGA for your submission</div>
-      </div>
-      <Card style={{ marginBottom: 18 }}>
-        <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 180 }}>
-            <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>Industry / Class</label>
-            <input placeholder="e.g. Roofing, Restaurant..." value={industry} onChange={e => setIndustry(e.target.value)} style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.text, padding: "8px 12px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: 11, color: C.textMid, marginBottom: 5 }}>Fit Level</label>
-            <div style={{ display: "flex", gap: 6 }}>
-              {["All", "Strong", "Moderate"].map(f => <button key={f} onClick={() => setFit(f)} style={{ padding: "7px 13px", borderRadius: 6, border: `1px solid ${C.border}`, background: fit === f ? C.accentGlow : "transparent", color: fit === f ? C.accent : C.textMid, fontSize: 11, fontFamily: "inherit", cursor: "pointer", fontWeight: fit === f ? 700 : 400 }}>{f}</button>)}
-            </div>
-          </div>
-        </div>
-      </Card>
-      <Card>
-        <Sec>Results — {filtered.length} Markets</Sec>
-        <DataTable headers={["Market", "Type", "Fit", "Classes", "States", ""]}
-          rows={filtered.map(m => [
-            <b style={{ color: C.text }}>{m.name}</b>,
-            <Tag color={m.type === "Carrier" ? C.accent : C.amber}>{m.type}</Tag>,
-            <Tag color={m.fit === "Strong" ? C.green : C.amber}>{m.fit}</Tag>,
-            <span style={{ fontSize: 11, color: C.textMid }}>{m.classes.join(", ")}</span>,
-            <span style={{ fontSize: 11, color: C.textMid }}>{m.states.join(", ")}</span>,
-            <Btn small variant="success">Select</Btn>
-          ])} />
-      </Card>
-    </div>
-  );
-}
 
 // ── ROOT ───────────────────────────────────────────────────────────
+// Maps the app's NAICS categories onto the verticals the ISF benchmarks use.
+const VERTICAL_MAP = {
+  Construction: "Contractor",
+  Hospitality: "Restaurant",
+  Manufacturing: "Manufacturing",
+  "Real Estate": "Habitational",
+};
+
+const industryTitle = (code) => getNAICSEntry(code)?.industry || "";
+const isKnownNaics = (code) => !!getNAICSEntry(code);
+
+// The question/answer pairs from the saved score breakdown, for the email.
+const qaFromBreakdown = (s) =>
+  (s?.riskBreakdown?.sections || []).flatMap(sec => sec.items.map(it => [it.question, it.answer]));
+
+function userFromAttributes(attributes, fallback = {}) {
+  return {
+    id: attributes.sub || fallback.id,
+    email: attributes.email || fallback.email,
+    name: attributes.name || (attributes.email || fallback.email || "").split("@")[0],
+    role: attributes["custom:role"] || "producer",
+    orgId: attributes["custom:orgId"] || null,
+  };
+}
+
 export default function App() {
-  const [page, setPage] = useState("home");
+  const [page, setPage] = useState("dash");
   const [context, setContext] = useState({});
-  const [activeSubmissionId, setActiveSubmissionId] = useState(null);
+  const [openId, setOpenId] = useState(null);
   const [drafts, setDrafts] = useState([]);
   const [submissions, setSubmissions] = useState([]);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-
-  const nav = p => setPage(p);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-useEffect(() => {
+  const go = (p) => {
+    if (p === "new-submission") setContext({});
+    setPage(p);
+    window.scrollTo(0, 0);
+  };
+
+  useEffect(() => {
     async function bootstrapAuth() {
       try {
         const currentUser = await getCurrentUser();
         const attributes = await fetchUserAttributes();
-        setUser({
-          id: currentUser.userId,
-          email: attributes.email || currentUser.username,
-          name: attributes.name || attributes.email?.split("@")[0] || currentUser.username,
-          role: attributes["custom:role"] || "producer",
-        });
+        setUser(userFromAttributes(attributes, { id: currentUser.userId, email: currentUser.username }));
       } catch (err) {
-        // Expected when no session exists yet (user is on login screen).
-        // Only log if it's an unexpected error.
-        if (err.name !== "UserUnAuthenticatedException") {
-          console.warn("Auth bootstrap failed", err);
-        }
+        // Expected when no session exists yet (user is on the sign-in screen).
+        if (err.name !== "UserUnAuthenticatedException") console.warn("Auth bootstrap failed", err);
       } finally {
         setAuthLoading(false);
       }
     }
-
     bootstrapAuth();
   }, []);
-  
-  useEffect(() => {
-    if (!user) return;
 
-    async function loadDrafts() {
-      try {
-        const savedDrafts = await fetchDraftsApi();
-        const list = Array.isArray(savedDrafts) ? savedDrafts : [];
-        const migrated = list.map(migrateLegacyDraft);
-        setDrafts(migrated);
-      } catch (err) {
-        console.error("Draft load failed", err);
-        showToast(`Couldn't load drafts from server. Working offline.`, "red");
-      }
-    }
-
-    async function loadSubmissions() {
-      try {
-        const savedSubmissions = await fetchSubmissionsApi();
-        setSubmissions(Array.isArray(savedSubmissions) ? savedSubmissions : []);
-      } catch (err) {
-        console.error("Submission load failed", err);
-        // Don't toast — drafts toast already covers connectivity issues
-      }
-    }
-
-    loadDrafts();
-    loadSubmissions();
-  }, [user]);
-
-  const handleLogin = (userData) => {
-    setUser(userData);
-    setPage("home");
-    showToast(`Welcome back, ${userData.name || "Agent"}!`, "success");
+  const refreshSubmissions = async () => {
+    const list = await fetchSubmissionsApi();
+    setSubmissions(Array.isArray(list) ? list : []);
   };
 
-const handleLogout = async () => {
-    try {
-      await signOut();
-    } catch (err) {
-      console.warn("Sign out failed", err);
-    }
+  useEffect(() => {
+    if (!user) return;
+    fetchDraftsApi()
+      .then(list => setDrafts((Array.isArray(list) ? list : []).map(migrateLegacyDraft)))
+      .catch(err => { console.error("Draft load failed", err); showToast("Couldn't load drafts from the server.", "red"); });
+    fetchSubmissionsApi()
+      .then(list => setSubmissions(Array.isArray(list) ? list : []))
+      .catch(err => console.error("Submission load failed", err));
+  }, [user]);
+
+  const handleLogin = (attributes) => {
+    setUser(userFromAttributes(attributes));
+    setPage("dash");
+  };
+
+  const handleLogout = async () => {
+    try { await signOut(); } catch (err) { console.warn("Sign out failed", err); }
     setUser(null);
-    setPage("home");
-    showToast("Signed out", "success");
+    setSubmissions([]);
+    setDrafts([]);
+    setPage("dash");
   };
 
   const handleSaveDraft = async (draftData, options = {}) => {
     let apiFailed = false;
-    try {
-      await saveDraftApi(draftData);
-    } catch (err) {
-      console.warn("Draft API save failed", err);
-      apiFailed = true;
-    }
-
+    try { await saveDraftApi(draftData); } catch (err) { console.warn("Draft API save failed", err); apiFailed = true; }
     setDrafts(prev => {
-      const existing = prev.findIndex(d => d.id === draftData.id);
-      if (existing >= 0) {
-        const updated = [...prev];
-        updated[existing] = draftData;
-        return updated;
-      }
-      return [...prev, draftData];
+      const i = prev.findIndex(d => d.id === draftData.id);
+      if (i < 0) return [...prev, draftData];
+      const next = [...prev]; next[i] = draftData; return next;
     });
-
-    // Suppress toast for autosaves; only show on manual Save clicks.
-    // If the cloud save failed, surface that even on autosave so the user knows.
-    if (apiFailed) {
-      showToast("Draft saved locally — cloud sync failed", "amber");
-    } else if (!options.silent) {
-      showToast(`Draft saved — "${draftData.businessName || "Untitled"}"`, "amber");
-    }
+    if (apiFailed) showToast("Draft saved locally. Cloud sync failed.", "amber");
+    else if (!options.silent) showToast(`Draft saved: "${draftData.businessName || "Untitled"}"`, "amber");
   };
 
-  const handleResumeDraft = (draftData) => {
-    setContext({ draft: migrateLegacyDraft(draftData) });
-  };
+  const resumeDraft = (d) => { setContext({ draft: migrateLegacyDraft(d) }); setPage("new-submission"); };
 
   const handleDeleteDraft = async (draftId) => {
-    // Optimistic UI: remove immediately for snappy feel
-    const previousDrafts = drafts;
+    const previous = drafts;
     setDrafts(prev => prev.filter(d => d.id !== draftId));
-
-    try {
-      await deleteDraftApi(draftId);
-      showToast("Draft deleted", "success");
-    } catch (err) {
-      // Roll back the optimistic update — the draft is still in DynamoDB
-      setDrafts(previousDrafts);
-      showToast(`Delete failed: ${err.message}`, "red");
-      console.error("Draft API delete failed", err);
-    }
+    try { await deleteDraftApi(draftId); showToast("Draft deleted"); }
+    catch (err) { setDrafts(previous); showToast(`Delete failed: ${err.message}`, "red"); }
   };
 
-  const handleRunMarkets = async (marketName, form, score, riskBreakdown = null) => {
-    try {
-      // First market send for this submission? Persist it to DynamoDB.
-      // Subsequent sends reuse the same submissionId so we don't duplicate.
-      let submissionIdToUse = activeSubmissionId;
-      if (!submissionIdToUse) {
-        // --- ISF: validate the score against S&P data before persisting ---
-        const VERTICAL_MAP = {
-          Construction: "Contractor",
-          Hospitality: "Restaurant",
-          Manufacturing: "Manufacturing",
-          "Real Estate": "Habitational",
-        };
-        const category = getNAICSEntry(form.naicsCode)?.category;
-        const vertical = VERTICAL_MAP[category];
-        const line = form.glLimit ? "GL" : (form.propertyLimit ? "Property" : "GL");
-
-        let synthScore = null;
-        let comparison = null;
-        try {
-          const isf = await scoreWithIsfApi({
-            vertical,
-            line,
-            state: form.state || undefined,
-            originalScore: score,
-          });
-          synthScore = isf.synth_score;
-          comparison = isf.comparison;
-        } catch (isfErr) {
-          // The ISF must never block a submission from saving. If it fails, we
-          // persist the submission without it and move on.
-          console.warn("ISF scoring failed — saving without it", isfErr);
-        }
-
-        const result = await saveSubmissionApi({
-          ...form,
-          score,
-          synthScore,
-          comparison,
-          riskBreakdown,
-          draftId: form.id,
-          stage: "Marketing",
-        });
-        submissionIdToUse = result.submissionId;
-        setActiveSubmissionId(submissionIdToUse);
-
-        // Submission just got created — refetch the list so the new row appears.
-        // PDF generation runs async; UI will pick up the pdfUrl on next refresh.
-        try {
-          const savedSubmissions = await fetchSubmissionsApi();
-          setSubmissions(Array.isArray(savedSubmissions) ? savedSubmissions : []);
-        } catch (refetchErr) {
-          console.warn("Submission refetch failed", refetchErr);
-        }
-      }
-
-      // Notify the market — currently a no-op placeholder. The real market integration
-      // (probably AI-generated carrier emails in a future phase) doesn't exist yet, so
-      // we just track the click in the UI as if it succeeded. Removing the sendMarketApi
-      // call until that backend route is built.
-      try {
-        await sendMarketApi(marketName, form, score);
-      } catch (sendErr) {
-        console.info("Market send API not yet implemented — proceeding anyway", sendErr.message);
-      }
-
-      showToast(`Tracked send to ${marketName} ✓`, "success");
-      return { ok: true };
-    } catch (err) {
-      console.error("Run market failed", err);
-      showToast(`Send to ${marketName} failed: ${err.message}`, "red");
-      return { ok: false };
+  // CSV rows become drafts (no SR number is used until a draft is finished).
+  const importDrafts = async (rows) => {
+    let ok = 0;
+    const base = Date.now();
+    for (const [i, row] of rows.entries()) {
+      const draft = {
+        ...row,
+        id: base + i,
+        producer: user?.name || "",
+        glLimit: row.line === "GL" ? "$1,000,000" : "",
+        propLimit: row.line === "Property" ? "$1,000,000" : "",
+        score: Math.round(computeScore(row.naicsCode, 0, 0, 0, {}) * 10) / 10,
+        industryAnswers: {},
+        categoryExposure: {},
+        savedAt: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      };
+      try { await saveDraftApi(draft); setDrafts(prev => [...prev, draft]); ok++; }
+      catch (err) { console.warn("Import row failed", row.businessName, err); }
     }
+    return ok;
   };
 
   const handleGenerateSubmission = async (form, score, riskBreakdown = null) => {
     try {
-      const VERTICAL_MAP = {
-        Construction: "Contractor",
-        Hospitality: "Restaurant",
-        Manufacturing: "Manufacturing",
-        "Real Estate": "Habitational",
-      };
-      const category = getNAICSEntry(form.naicsCode)?.category;
-      const vertical = VERTICAL_MAP[category];
-      const line = form.glLimit ? "GL" : (form.propLimit ? "Property" : "GL");
+      const vertical = VERTICAL_MAP[getNAICSEntry(form.naicsCode)?.category];
+      const line = form.line || (form.glLimit ? "GL" : (form.propLimit ? "Property" : "GL"));
 
-      let synthScore = null;
-      let comparison = null;
+      let isf = null;
       try {
-        const isf = await scoreWithIsfApi({
-          vertical,
-          line,
-          state: form.state || undefined,
-          originalScore: score,
-        });
-        synthScore = isf.synth_score;
-        comparison = isf.comparison;
+        isf = await scoreWithIsfApi({ vertical, line, state: form.state || undefined, originalScore: score });
       } catch (isfErr) {
-        console.warn("ISF scoring failed — saving without it", isfErr);
+        // The ISF must never block a submission from saving.
+        console.warn("ISF scoring failed, saving without it", isfErr);
       }
 
-      const result = await saveSubmissionApi({
+      await saveSubmissionApi({
         ...form,
+        line,
         score,
-        synthScore,
-        comparison,
+        synthScore: isf?.synth_score ?? null,
+        comparison: isf?.comparison ?? null,
+        isfExplanation: isf?.explanation ?? null,
+        isfAsOf: isf?.as_of ?? null,
         riskBreakdown,
         draftId: form.id,
         stage: "Marketing",
       });
-
-      try {
-        const savedSubmissions = await fetchSubmissionsApi();
-        setSubmissions(Array.isArray(savedSubmissions) ? savedSubmissions : []);
-      } catch (refetchErr) {
-        console.warn("Submission refetch failed", refetchErr);
-      }
-
-      showToast("Submission saved — generating PDF…", "success");
-      return { ok: true, submissionId: result?.submissionId };
+      setDrafts(prev => prev.filter(d => d.id !== form.id));
+      try { await refreshSubmissions(); } catch (e) { console.warn("Submission refetch failed", e); }
+      showToast("Submission saved. Generating PDF…");
+      return { ok: true };
     } catch (err) {
       console.error("Generate submission failed", err);
       showToast(`Couldn't save submission: ${err.message}`, "red");
@@ -2976,59 +2129,51 @@ const handleLogout = async () => {
     }
   };
 
-  useEffect(() => {
-    if (page === "new-submission") {
-      setActiveSubmissionId(null);
+  // Updates an existing submission: apply the change on screen right away,
+  // then re-post it with the same id + SR number. Rolls back if the save fails.
+  const saveSubmissionPatch = async (sub, patch) => {
+    const id = subId(sub);
+    const next = { ...sub, ...patch };
+    setSubmissions(prev => prev.map(s => (subId(s) === id ? next : s)));
+    setSaving(true);
+    try {
+      await saveSubmissionApi(resaveBody(sub, patch));
+    } catch (err) {
+      setSubmissions(prev => prev.map(s => (subId(s) === id ? sub : s)));
+      showToast(`Save failed: ${err.message}`, "red");
+    } finally {
+      setSaving(false);
     }
-  }, [page, context]);
-
-  const pages = {
-    home: <HomePage setPage={nav} setContext={setContext} drafts={drafts} submissions={submissions} user={user} />,
-    "new-submission": <NewSubmissionPage context={context} user={user} onSaveDraft={handleSaveDraft} onGenerateSubmission={handleGenerateSubmission} setPage={nav} />,
-    pipeline: <PipelinePage setPage={nav} setContext={setContext} drafts={drafts} onResumeDraft={handleResumeDraft} onDeleteDraft={handleDeleteDraft} />,
-    submissions: <SubmissionsPage submissions={submissions} onRefresh={async () => {
-      const result = await fetchSubmissionsApi();
-      setSubmissions(Array.isArray(result) ? result : []);
-    }} onOpenSubmission={(s) => { setContext({ submission: s }); nav("submission-detail"); }} />,
-    "submission-workspace": <SubmissionWorkspacePage context={context} setPage={nav} setContext={setContext} />,
-    "submission-detail": <SubmissionDetailPage context={context} setPage={nav} />,
-    accounts: <AccountsPage setPage={nav} setContext={setContext} />,
-    "account-workspace": <AccountWorkspacePage context={context} setPage={nav} setContext={setContext} />,
-    markets: <MarketsPage />,
   };
+
+  const openSubmission = (s) => { setOpenId(subId(s)); setPage("detail"); window.scrollTo(0, 0); };
+  const openSub = submissions.find(s => subId(s) === openId) || null;
 
   if (authLoading) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg, color: C.text, fontFamily: "'DM Sans', 'Segoe UI', sans-serif" }}>
-        <div style={{ textAlign: "center", maxWidth: 360 }}>
-          <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>Loading session…</div>
-          <div style={{ color: C.textMid, fontSize: 13 }}>Checking for an active Cognito session before showing the app.</div>
-        </div>
-      </div>
+      <div className="auth syn"><div className="dim">Checking your session…</div></div>
     );
   }
 
-  if (!user) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
+  if (!user) return <LoginPage onLogin={handleLogin} />;
+
+  const pages = {
+    dash: <Dashboard user={user} submissions={submissions} drafts={drafts} open={openSubmission} resumeDraft={resumeDraft} industryTitle={industryTitle} />,
+    "new-submission": <NewSubmissionPage context={context} user={user} onSaveDraft={handleSaveDraft} onGenerateSubmission={handleGenerateSubmission} setPage={go} />,
+    pipe: <Pipeline submissions={submissions} drafts={drafts} open={openSubmission} resumeDraft={resumeDraft} deleteDraft={handleDeleteDraft}
+      industryTitle={industryTitle} isKnownNaics={isKnownNaics} onImport={importDrafts} />,
+    submissions: <SubmissionsPage submissions={submissions} onRefresh={refreshSubmissions} onOpenSubmission={openSubmission} />,
+    renew: <Renewals submissions={submissions} open={openSubmission} />,
+    detail: <SubmissionDetail sub={openSub} user={user} industryTitle={industryTitle} qa={qaFromBreakdown(openSub)} saving={saving}
+      onSave={(patch) => openSub && saveSubmissionPatch(openSub, patch)} onBack={() => go("pipe")} />,
+  };
 
   return (
-    <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'DM Sans', 'Segoe UI', sans-serif", color: C.text }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #1c2030; border-radius: 2px; }
-        button { transition: opacity 0.15s; }
-        button:hover:not(:disabled) { opacity: 0.85; }
-        tr:hover td { background: rgba(61,142,248,0.03); }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
-      <Sidebar page={page} setPage={nav} setContext={setContext} draftCount={drafts.length} user={user} onLogout={handleLogout} />
-      <main style={{ marginLeft: 210, padding: "28px 32px", minHeight: "100vh", width: "calc(100vw - 210px)" }}>
-        {pages[page] || pages["home"]}
-      </main>
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
+    <>
+      <Shell user={user} page={page} go={go} onLogout={handleLogout} counts={{ pipe: drafts.length + submissions.length || null }}>
+        {pages[page] || pages.dash}
+      </Shell>
+      {toast && <div className={"toast " + toast.type} onClick={() => setToast(null)}>{toast.message}</div>}
+    </>
   );
 }
