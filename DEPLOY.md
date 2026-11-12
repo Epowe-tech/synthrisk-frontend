@@ -52,3 +52,11 @@ This frontend now includes placeholders for backend API wiring using the followi
 - `POST /markets/send`
 
 Adjust the route paths in `src/SynthRisk.jsx` to match your real Lambda/API Gateway endpoints.
+
+## SYNTH port (phase 1)
+The UI now follows the SYNTH design (Poppins, SYNTH brand tokens in `src/index.css`) and adds the SYNTH dashboard, pipeline, submission detail and renewals screens under `src/synth/`. It still uses the same backend: Cognito, plus the six routes on `pk0hs5sip3`. There are no backend changes in this phase.
+
+- Updating a submission (stage, outcomes by market, review, account fields, renewal date) re-posts it to `POST /submissions` with the same `id` and `srNumber`. `saveSubmission` overwrites the row and keeps the SR number. One side effect: each save also kicks off `synthrisk-generatePDF` again. Phase 2 adds `PATCH /submissions/{id}` to stop that.
+- New fields saved on submissions: `state`, `line`, `outreach[]`, `review`, `renewalDate`, `notes`, `newVenture`, `lossRunsReady`, `isfExplanation`, `isfAsOf`.
+- Sign-in no longer offers self sign-up, because the user pool is admin-create-only. Forgot password now completes the whole flow: request a code, then enter the code and the new password twice.
+- The full gap map and the phase plan are in the SynthRisk project doc `SYNTH-port-gap-map.md`.
